@@ -1,0 +1,26 @@
+# NewsGlean 反向代理配置（Caddy v2）
+#
+# 目标架构：
+#   公网 → 443 (HTTPS + Basic Auth) → 127.0.0.1:28080 (Go 服务，保持回环)
+#
+# 用法（详见 deploy/DEPLOY.md）：
+#   1. 生成口令哈希：caddy hash-password
+#   2. 把输出（形如 $2a$14$...）粘贴到下方 basicauth 的 <bcrypt-hash> 处
+#   3. 把 newsglean.example.com 换成你的域名（需解析到本机，80/443 放通）
+#   4. 放行后 Caddy 自动申请并续期 TLS 证书，无需手动管证书
+
+newsglean.example.com {
+	# —— 单账户访问门：HTTP Basic Auth ——
+	# 一次锁死 /api、/swagger、静态页面与 SSE，前端零改动。
+	# 用户名随意（示例用 you），哈希由 `caddy hash-password` 生成。
+	basicauth {
+		you <bcrypt-hash>
+	}
+
+	# 反向代理到本机 Go 服务。
+	# Go 服务务必保持 server.http_addr = 127.0.0.1:28080，不对公网开放。
+	reverse_proxy 127.0.0.1:28080 {
+		# SSE（/api/refresh/stream）需要立即 flush，不能缓冲
+		flush_interval -1
+	}
+}

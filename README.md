@@ -97,6 +97,7 @@ news-glean list --unread
 | ------------------------ | ------------------------------------------------------------------ |
 | **README.md**            | 项目简介（本文件）                                                 |
 | **[PLAN.md](./PLAN.md)** | 设计方案与实现规格：采集抽象、数据模型、命令设计、路线图、技术选型 |
+| **[DEPLOY.md](./DEPLOY.md)** | 公网部署指南：反代（Nginx/Caddy）+ HTTPS + Basic Auth + systemd 自启动 |
 
 技术栈与项目结构约定参照同组织的 `bookcocoon-server`：Go + Cobra + GORM(sqlite/mysql)、标准库 `net/http` 与 swaggo、`internal/` 顶层包布局、PowerShell 构建脚本注入版本号。详见 [PLAN.md 的项目结构](./PLAN.md#项目结构)。
 
