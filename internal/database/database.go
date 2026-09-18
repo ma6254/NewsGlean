@@ -7,7 +7,6 @@ import (
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
 )
 
 // DB 持有 GORM 句柄，封装连接与首次建表。
@@ -27,7 +26,7 @@ func Open(driver, dsn string) (*DB, error) {
 		return nil, fmt.Errorf("unknown database driver %q", driver)
 	}
 	gdb, err := gorm.Open(dialector, &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Warn),
+		Logger: gormLogger(),
 	})
 	if err != nil {
 		return nil, err

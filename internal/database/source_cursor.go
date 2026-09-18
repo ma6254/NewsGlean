@@ -1,10 +1,9 @@
 package database
 
-import (
-	"errors"
-
-	"gorm.io/gorm"
-)
+// 注意：本文件对游标的查询刻意用 Find 而非 First。
+// 首次采集时 source_cursors 无记录属于正常情况，First 会触发 gorm.ErrRecordNotFound
+// 并被 GORM 日志器以 Warn 打印，容易误读为「报错」。改用 Find + len 判断，
+// 只在「确实还没有游标（第一次）」这一条件下静默返回，真实的数据库错误仍照常返回。
 
 // SourceCursor 拉取游标表（source_cursors）。
 // 游标是不透明字节串，由各渠道适配器自行解释：RSS 存 ETag/Last-Modified，
@@ -21,15 +20,14 @@ func (SourceCursor) TableName() string { return "source_cursors" }
 
 // GetCursor 返回指定渠道的持久化游标；尚未记录时返回 (nil, nil)。
 func (d *DB) GetCursor(sourceID uint64) ([]byte, error) {
-	var c SourceCursor
-	err := d.Where("source_id = ?", sourceID).First(&c).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, nil
-	}
-	if err != nil {
+	var list []SourceCursor
+	if err := d.Where("source_id = ?", sourceID).Limit(1).Find(&list).Error; err != nil {
 		return nil, err
 	}
-	return []byte(c.Cursor), nil
+	if len(list) == 0 {
+		return nil, nil
+	}
+	return []byte(list[0].Cursor), nil
 }
 
 // SaveCursor 持久化指定渠道的游标（upsert）。
@@ -39,14 +37,13 @@ func (d *DB) SaveCursor(sourceID uint64, cursor []byte) error {
 		return d.Where("source_id = ?", sourceID).Delete(&SourceCursor{}).Error
 	}
 
-	var existing SourceCursor
-	err := d.Where("source_id = ?", sourceID).First(&existing).Error
-	if err == nil {
+	var existing []SourceCursor
+	if err := d.Where("source_id = ?", sourceID).Limit(1).Find(&existing).Error; err != nil {
+		return err
+	}
+	if len(existing) > 0 {
 		return d.Model(&SourceCursor{}).Where("source_id = ?", sourceID).
 			Updates(map[string]any{"cursor": string(cursor), "updated_at": nowString()}).Error
-	}
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return err
 	}
 	return d.Create(&SourceCursor{
 		SourceID:  sourceID,
