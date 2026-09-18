@@ -36,7 +36,9 @@ type EntryListResponse struct {
 	PageSize int        `json:"page_size"` // 每页数量
 }
 
-func toEntryDTO(e *database.Entry) EntryDTO {
+// toEntryDTO 把条目与阅读状态映射为对外 DTO。readLater 来自 entry_state 表，
+// 由调用方查询后传入，避免本函数反向依赖数据库查询。
+func toEntryDTO(e *database.Entry, readLater bool) EntryDTO {
 	var tags []string
 	if e.Tags != "" {
 		_ = json.Unmarshal([]byte(e.Tags), &tags)
@@ -65,7 +67,7 @@ func toEntryDTO(e *database.Entry) EntryDTO {
 		Tags:        tags,
 		Extra:       extra,
 		FetchedAt:   e.FetchedAt,
-		ReadLater:   e.ReadLater,
+		ReadLater:   readLater,
 	}
 }
 
@@ -91,9 +93,18 @@ func (s *Server) handleEntryList(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	ids := make([]uint64, len(list))
+	for i := range list {
+		ids[i] = list[i].ID
+	}
+	states, err := s.db.GetEntryStates(ids)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 	items := make([]EntryDTO, 0, len(list))
 	for i := range list {
-		items = append(items, toEntryDTO(&list[i]))
+		items = append(items, toEntryDTO(&list[i], states[list[i].ID].ReadLater))
 	}
 	writeJSON(w, http.StatusOK, EntryListResponse{
 		Items:    items,
@@ -127,7 +138,12 @@ func (s *Server) handleEntryGet(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, toEntryDTO(entry))
+	state, err := s.db.GetEntryState(id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, toEntryDTO(entry, state.ReadLater))
 }
 
 // handleReadLaterList 处理 GET /api/entry/read-later（分页列出「稍后再阅」条目）。
@@ -152,7 +168,7 @@ func (s *Server) handleReadLaterList(w http.ResponseWriter, r *http.Request) {
 	}
 	items := make([]EntryDTO, 0, len(list))
 	for i := range list {
-		items = append(items, toEntryDTO(&list[i]))
+		items = append(items, toEntryDTO(&list[i], true))
 	}
 	writeJSON(w, http.StatusOK, EntryListResponse{
 		Items:    items,
@@ -188,7 +204,7 @@ func (s *Server) handleEntrySetReadLater(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
 		return
 	}
-	entry, err := s.db.SetReadLater(id, req.ReadLater)
+	entry, err := s.db.GetEntry(id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			writeError(w, http.StatusNotFound, "entry not found")
@@ -197,5 +213,10 @@ func (s *Server) handleEntrySetReadLater(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, toEntryDTO(entry))
+	state, err := s.db.SetReadLater(id, req.ReadLater)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, toEntryDTO(entry, state.ReadLater))
 }

@@ -135,10 +135,15 @@ func (a *App) refreshOne(ctx context.Context, s database.Source) ([]uint64, int,
 	}
 	defer conn.Close()
 
-	if err := conn.Init(ctx, source.State{}); err != nil {
+	// 载入上次持久化的游标，回传给适配器（Init），并在 Fetch 时透传。
+	cursor, err := a.db.GetCursor(s.ID)
+	if err != nil {
 		return nil, 0, err
 	}
-	items, _, err := conn.Fetch(ctx, nil, defaultFetchLimit)
+	if err := conn.Init(ctx, source.State{Cursor: source.Cursor(cursor)}); err != nil {
+		return nil, 0, err
+	}
+	items, newCursor, err := conn.Fetch(ctx, source.Cursor(cursor), defaultFetchLimit)
 	if err != nil {
 		_ = a.db.UpdateSourceHealth(s.ID, s.FailCount+1, err.Error())
 		return nil, 0, err
@@ -157,6 +162,10 @@ func (a *App) refreshOne(ctx context.Context, s database.Source) ([]uint64, int,
 		} else {
 			skipped++
 		}
+	}
+	// 全部条目写库成功后推进游标；中途失败则保留旧游标，下一轮重取兜底。
+	if err := a.db.SaveCursor(s.ID, []byte(newCursor)); err != nil {
+		return insertedIDs, skipped, err
 	}
 	_ = a.db.UpdateSourceHealth(s.ID, 0, "")
 	return insertedIDs, skipped, nil

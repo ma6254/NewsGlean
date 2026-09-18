@@ -26,7 +26,6 @@ type Entry struct {
 	CreatedAt   string `gorm:"column:created_at"`                         // 创建时间
 	UpdatedAt   string `gorm:"column:updated_at"`                         // 更新时间
 	Deleted     bool   `gorm:"column:deleted"`                            // 删除标记，软删除
-	ReadLater   bool   `gorm:"column:read_later;index"`                   // 稍后再阅标记
 }
 
 // TableName 指定表名。
@@ -135,38 +134,4 @@ func (d *DB) LatestPublishTimes() (map[uint64]string, error) {
 		m[r.SourceID] = r.Latest
 	}
 	return m, nil
-}
-
-// SetReadLater 设置或取消条目的「稍后再阅」标记，并刷新 updated_at（用于按加入时间排序）。
-// 返回更新后的完整条目；条目不存在或已删除时返回 gorm.ErrRecordNotFound。
-func (d *DB) SetReadLater(id uint64, readLater bool) (*Entry, error) {
-	res := d.Model(&Entry{}).
-		Where("id = ? AND deleted = ?", id, false).
-		Updates(map[string]any{"read_later": readLater, "updated_at": nowString()})
-	if res.Error != nil {
-		return nil, res.Error
-	}
-	if res.RowsAffected == 0 {
-		return nil, gorm.ErrRecordNotFound
-	}
-	return d.GetEntry(id)
-}
-
-// ListReadLater 分页返回标记为「稍后再阅」的未删除条目，按加入时间倒序（updated_at DESC）。
-func (d *DB) ListReadLater(page, pageSize int) ([]Entry, int64, error) {
-	if page < 1 {
-		page = 1
-	}
-	if pageSize < 1 || pageSize > 200 {
-		pageSize = 50
-	}
-	q := d.Model(&Entry{}).Where("deleted = ? AND read_later = ?", false, true)
-	var total int64
-	if err := q.Count(&total).Error; err != nil {
-		return nil, 0, err
-	}
-	var list []Entry
-	err := q.Order("updated_at DESC, id DESC").
-		Offset((page - 1) * pageSize).Limit(pageSize).Find(&list).Error
-	return list, total, err
 }

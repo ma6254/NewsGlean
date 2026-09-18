@@ -4,24 +4,25 @@
 
 [![Go](https://img.shields.io/badge/Go-1.23+-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![License](https://img.shields.io/badge/License-MIT-blue)](./LICENSE)
-[![Status](https://img.shields.io/badge/status-M1-blue)](#项目状态)
+[![Status](https://img.shields.io/badge/status-M2进行中-orange)](#项目状态)
 
 ---
 
 ## 项目状态
 
-**当前进度：M1（v0.1）已完成 —— 一条采集链路已跑通。**
+**当前进度：M1（v0.1）已完成，M2 部分功能已提前落地 —— 采集链路跑通，跨渠道去重、游标持久化、稍后再阅、渠道管理已就绪。**
 
-| 能力        | 现状                                                               |
-| ----------- | ------------------------------------------------------------------ |
-| 采集契约    | `internal/source`：`Connector` / `Item` / `Cursor` / `State` 已定稿 |
-| `feed` 渠道 | RSS 2.0 / Atom / JSON Feed 解析 + 单元测试                         |
-| 数据层      | GORM + SQLite，`sources` / `entries` 两表，`Install()` 自动建表     |
-| 配置        | `internal/config` + `docs/default.yml`                             |
-| HTTP API    | `/api/source` CRUD、`/api/refresh`、`/api/entry/list`，Swagger UI `/swagger/index.html` |
-| 命令        | `news-glean`（启动服务）+ `version` 子命令                          |
+| 能力        | 现状                                                                 |
+| ----------- | -------------------------------------------------------------------- |
+| 采集契约    | `internal/source`：`Connector` / `Item` / `Cursor` / `State` + 可选 `Prober` 已定稿 |
+| `feed` 渠道 | RSS 2.0 / Atom / JSON Feed 解析 + 单元测试；支持 `http` / `chromedp` / `chromedp_headed` 抓取 |
+| 数据层      | GORM + SQLite，`sources` / `entries` / `source_cursors` / `entry_state` 四表，`Install()` 自动建表 + 一次性迁移 |
+| 去重        | 三层去重（GUID → URL → 内容指纹），含跨渠道指纹去重                  |
+| 配置        | `internal/config` + `docs/default.yml`                              |
+| HTTP API    | `/api/source` CRUD、`/api/source/probe`、`/api/refresh`、`/api/entry/list`、`/api/entry/read-later`，Swagger UI `/swagger/index.html` |
+| 命令        | `news-glean`（启动服务）+ `version` 子命令                           |
 
-M1 验收（DoD）已达成：`go build` / `go vet` / `go test` 全绿，且 `source add feed → 手动采集 → GET /api/entry/list` 链路可用。M2–M4 尚未开始，完整设计见 **[PLAN.md](./PLAN.md)**。
+M1 验收（DoD）已达成：`go build` / `go vet` / `go test` 全绿，`source add feed → 手动采集 → GET /api/entry/list` 链路可用。M2 的跨渠道去重、游标持久化、「稍后再阅」、Swagger UI 已提前落地；其余 M2–M4 尚未开始，完整设计见 **[PLAN.md](./PLAN.md)**。
 
 ---
 
@@ -69,10 +70,10 @@ go mod download
 go build -o news-glean .
 ```
 
-Windows 上得到 `news-glean.exe`。脚手架阶段只有帮助信息可看：
+Windows 上得到 `news-glean.exe`。直接运行即启动常驻服务（首次自动建库并预置默认源），Web 界面与 Swagger 地址见启动日志：
 
 ```bash
-go run . --help
+go run . -d ./release   # Web: http://127.0.0.1:28080  Swagger: /swagger/index.html
 ```
 
 <details>

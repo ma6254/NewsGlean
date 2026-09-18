@@ -201,6 +201,55 @@ func TestSourceProbe(t *testing.T) {
 	}
 }
 
+// TestRefreshPersistsCursor 验证游标跨轮次持久化：第二轮采集应带上上一轮的
+// ETag 条件请求头，服务端命中 304 后不重复入库。
+func TestRefreshPersistsCursor(t *testing.T) {
+	const etag = `"cursor-etag-1"`
+	var hits int
+	feedSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		if r.Header.Get("If-None-Match") == etag {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+		w.Header().Set("Content-Type", "application/rss+xml")
+		w.Header().Set("ETag", etag)
+		_, _ = w.Write([]byte(rssBody))
+	}))
+	defer feedSrv.Close()
+
+	ts := newTestServer(t)
+
+	add := doJSON(t, http.MethodPost, ts.URL+"/api/source",
+		`{"name":"test","type":"feed","config":{"url":"`+feedSrv.URL+`"}}`)
+	if add.status != http.StatusOK {
+		t.Fatalf("add source status = %d, body = %s", add.status, add.body)
+	}
+
+	var refreshResult struct {
+		Inserted int `json:"inserted"`
+	}
+	first := doJSON(t, http.MethodPost, ts.URL+"/api/refresh", "")
+	if err := json.Unmarshal(first.body, &refreshResult); err != nil {
+		t.Fatalf("unmarshal first refresh: %v", err)
+	}
+	if refreshResult.Inserted != 2 {
+		t.Fatalf("first refresh inserted = %d, want 2", refreshResult.Inserted)
+	}
+
+	// 第二轮应带上持久化的 ETag，命中 304，不重复入库
+	second := doJSON(t, http.MethodPost, ts.URL+"/api/refresh", "")
+	if err := json.Unmarshal(second.body, &refreshResult); err != nil {
+		t.Fatalf("unmarshal second refresh: %v", err)
+	}
+	if refreshResult.Inserted != 0 {
+		t.Fatalf("second refresh inserted = %d, want 0 (304)", refreshResult.Inserted)
+	}
+	if hits != 2 {
+		t.Fatalf("hits = %d, want 2 (first 200 + second 304)", hits)
+	}
+}
+
 // TestWebEmbedServesIndex 验证默认（embed 模式）下 / 能返回内嵌前端页面。
 func TestWebEmbedServesIndex(t *testing.T) {
 	ts := newTestServer(t)
