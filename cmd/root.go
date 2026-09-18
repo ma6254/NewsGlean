@@ -109,11 +109,14 @@ func runServe(cmd *cobra.Command, _ []string) error {
 	} else if n > 0 {
 		log.Info("seeded default sources", "count", n)
 	}
-	sched := scheduler.New(a)
+	sched := scheduler.New(cfg, db, a)
 	srv := server.New(cfg, db, a, sched)
 
 	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	// 挂上服务即启动定时后台调度：自动按渠道 interval 刷新，无需手动触发。
+	sched.Start(ctx)
 
 	errCh := make(chan error, 1)
 	go func() {
@@ -125,9 +128,12 @@ func runServe(cmd *cobra.Command, _ []string) error {
 
 	select {
 	case err := <-errCh:
+		sched.Stop()
 		return err
 	case <-ctx.Done():
 		log.Info("shutting down")
+		// 先停调度（等待在途采集收敛），再优雅关闭 HTTP 服务。
+		sched.Stop()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		return srv.Stop(shutdownCtx)

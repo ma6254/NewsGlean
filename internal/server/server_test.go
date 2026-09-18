@@ -60,7 +60,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 
 	cfg := config.Default()
 	a := app.New(cfg, db)
-	sched := scheduler.New(a)
+	sched := scheduler.New(cfg, db, a)
 	srv := New(cfg, db, a, sched)
 	ts := httptest.NewServer(srv.Handler())
 	t.Cleanup(ts.Close)
