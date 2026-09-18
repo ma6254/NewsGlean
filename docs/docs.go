@@ -415,6 +415,47 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/source/{id}/logs": {
+            "get": {
+                "description": "按时间倒序返回指定渠道最近的采集日志，用于排障",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "source"
+                ],
+                "summary": "列出渠道采集日志",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "渠道实例ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "返回条数上限（默认 50，最大 200）",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.FetchLogListResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
@@ -549,6 +590,59 @@ const docTemplate = `{
                 }
             }
         },
+        "server.FetchLogDTO": {
+            "type": "object",
+            "properties": {
+                "elapsed_ms": {
+                    "description": "耗时（毫秒）",
+                    "type": "integer"
+                },
+                "error": {
+                    "description": "错误信息（成功为空）",
+                    "type": "string"
+                },
+                "id": {
+                    "description": "日志ID",
+                    "type": "integer"
+                },
+                "inserted": {
+                    "description": "新增条目数",
+                    "type": "integer"
+                },
+                "skipped": {
+                    "description": "去重跳过数",
+                    "type": "integer"
+                },
+                "source_id": {
+                    "description": "归属渠道实例ID",
+                    "type": "integer"
+                },
+                "started_at": {
+                    "description": "采集开始时间（RFC3339）",
+                    "type": "string"
+                },
+                "success": {
+                    "description": "是否成功",
+                    "type": "boolean"
+                }
+            }
+        },
+        "server.FetchLogListResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "description": "日志列表（按时间倒序）",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/server.FetchLogDTO"
+                    }
+                },
+                "total": {
+                    "description": "返回条数",
+                    "type": "integer"
+                }
+            }
+        },
         "server.SourceDTO": {
             "type": "object",
             "properties": {
@@ -571,12 +665,20 @@ const docTemplate = `{
                     "description": "连续失败次数",
                     "type": "integer"
                 },
+                "fetch_count": {
+                    "description": "累计采集次数",
+                    "type": "integer"
+                },
                 "id": {
                     "description": "渠道实例ID",
                     "type": "integer"
                 },
                 "interval": {
                     "description": "刷新间隔（秒）",
+                    "type": "integer"
+                },
+                "last_elapsed_ms": {
+                    "description": "最近一次耗时（毫秒）",
                     "type": "integer"
                 },
                 "last_entry_at": {
@@ -587,9 +689,25 @@ const docTemplate = `{
                     "description": "最近一次错误",
                     "type": "string"
                 },
+                "last_fetch_at": {
+                    "description": "最近一次采集时间（RFC3339）",
+                    "type": "string"
+                },
+                "last_success_at": {
+                    "description": "最后成功时间（RFC3339）",
+                    "type": "string"
+                },
                 "name": {
                     "description": "显示名",
                     "type": "string"
+                },
+                "success_count": {
+                    "description": "累计成功次数",
+                    "type": "integer"
+                },
+                "success_rate": {
+                    "description": "成功率（0~1）",
+                    "type": "number"
                 },
                 "type": {
                     "description": "渠道类型标识",

@@ -128,7 +128,11 @@ func (a *App) RefreshSource(ctx context.Context, id uint64) (*RefreshResult, err
 }
 
 // refreshOne 拉取单个渠道并写库，返回 (新增条目ID列表, 去重跳过数, 错误)。
-func (a *App) refreshOne(ctx context.Context, s database.Source) ([]uint64, int, error) {
+// 无论成功与否，都会在结束时记录一条采集日志（fetch_log），用于可观测性与排障。
+func (a *App) refreshOne(ctx context.Context, s database.Source) (ids []uint64, skipped int, err error) {
+	startedAt := time.Now()
+	defer func() { a.recordFetchLog(s.ID, startedAt, len(ids), skipped, err) }()
+
 	conn, err := source.Create(s.Type, s.Config, source.CreateOptions{Proxy: a.cfg.Fetch.Proxy, ChromePath: a.cfg.Fetch.ChromePath})
 	if err != nil {
 		return nil, 0, err
@@ -149,26 +153,46 @@ func (a *App) refreshOne(ctx context.Context, s database.Source) ([]uint64, int,
 		return nil, 0, err
 	}
 
-	insertedIDs := []uint64{}
-	skipped := 0
+	ids = []uint64{}
 	for _, item := range items {
 		item.SourceID = strconv.FormatUint(s.ID, 10)
-		id, ok, err := a.ingestItem(s.ID, item)
-		if err != nil {
-			return insertedIDs, skipped, err
+		id, ok, ingestErr := a.ingestItem(s.ID, item)
+		if ingestErr != nil {
+			return ids, skipped, ingestErr
 		}
 		if ok {
-			insertedIDs = append(insertedIDs, id)
+			ids = append(ids, id)
 		} else {
 			skipped++
 		}
 	}
 	// 全部条目写库成功后推进游标；中途失败则保留旧游标，下一轮重取兜底。
 	if err := a.db.SaveCursor(s.ID, []byte(newCursor)); err != nil {
-		return insertedIDs, skipped, err
+		return ids, skipped, err
 	}
 	_ = a.db.UpdateSourceHealth(s.ID, 0, "")
-	return insertedIDs, skipped, nil
+	return ids, skipped, nil
+}
+
+// recordFetchLog 记录一条采集日志（fetch_log）。写日志失败只记错误、不阻断主流程。
+func (a *App) recordFetchLog(sourceID uint64, startedAt time.Time, inserted, skipped int, fetchErr error) {
+	success := fetchErr == nil
+	errMsg := ""
+	if fetchErr != nil {
+		errMsg = fetchErr.Error()
+	}
+	logEntry := &database.FetchLog{
+		SourceID:  sourceID,
+		StartedAt: startedAt.UTC().Format(time.RFC3339),
+		ElapsedMS: time.Since(startedAt).Milliseconds(),
+		Inserted:  inserted,
+		Skipped:   skipped,
+		Success:   success,
+		Error:     errMsg,
+	}
+	if err := a.db.CreateFetchLog(logEntry); err != nil {
+		logger.Error("record fetch log failed", "source_id", sourceID, "error", err)
+	}
 }
 
 // ingestItem 对单条 Item 做三层去重（GUID → URL → ContentHash）并写库，

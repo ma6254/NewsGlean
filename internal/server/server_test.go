@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"testing"
 
 	"github.com/ma6254/news-glean/internal/app"
@@ -247,6 +248,81 @@ func TestRefreshPersistsCursor(t *testing.T) {
 	}
 	if hits != 2 {
 		t.Fatalf("hits = %d, want 2 (first 200 + second 304)", hits)
+	}
+}
+
+// TestSourceFetchLogAndStats 验证采集日志可观测性：刷新后渠道列表带统计，日志端点可读。
+func TestSourceFetchLogAndStats(t *testing.T) {
+	feedSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/rss+xml")
+		_, _ = w.Write([]byte(rssBody))
+	}))
+	defer feedSrv.Close()
+
+	ts := newTestServer(t)
+
+	add := doJSON(t, http.MethodPost, ts.URL+"/api/source",
+		`{"name":"test","type":"feed","config":{"url":"`+feedSrv.URL+`"}}`)
+	if add.status != http.StatusOK {
+		t.Fatalf("add source status = %d, body = %s", add.status, add.body)
+	}
+	var created struct {
+		ID uint64 `json:"id"`
+	}
+	if err := json.Unmarshal(add.body, &created); err != nil {
+		t.Fatalf("unmarshal created: %v", err)
+	}
+
+	if ref := doJSON(t, http.MethodPost, ts.URL+"/api/refresh", ""); ref.status != http.StatusOK {
+		t.Fatalf("refresh status = %d, body = %s", ref.status, ref.body)
+	}
+
+	// 渠道列表应带采集统计
+	list := doJSON(t, http.MethodGet, ts.URL+"/api/source", "")
+	if list.status != http.StatusOK {
+		t.Fatalf("list sources status = %d", list.status)
+	}
+	var lr struct {
+		Items []struct {
+			ID            uint64  `json:"id"`
+			FetchCount    int64   `json:"fetch_count"`
+			SuccessCount  int64   `json:"success_count"`
+			SuccessRate   float64 `json:"success_rate"`
+			LastElapsedMS int64   `json:"last_elapsed_ms"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(list.body, &lr); err != nil {
+		t.Fatalf("unmarshal source list: %v", err)
+	}
+	found := false
+	for _, it := range lr.Items {
+		if it.ID == created.ID {
+			found = true
+			if it.FetchCount < 1 || it.SuccessCount < 1 || it.SuccessRate <= 0 {
+				t.Fatalf("stats not populated for source: %+v", it)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("created source not found in list")
+	}
+
+	// 采集日志端点应可读且首条为成功
+	logs := doJSON(t, http.MethodGet, ts.URL+"/api/source/"+strconv.FormatUint(created.ID, 10)+"/logs", "")
+	if logs.status != http.StatusOK {
+		t.Fatalf("logs status = %d, body = %s", logs.status, logs.body)
+	}
+	var logResp struct {
+		Total int `json:"total"`
+		Items []struct {
+			Success bool `json:"success"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(logs.body, &logResp); err != nil {
+		t.Fatalf("unmarshal logs: %v", err)
+	}
+	if logResp.Total < 1 || !logResp.Items[0].Success {
+		t.Fatalf("fetch log not recorded correctly: %+v", logResp)
 	}
 }
 

@@ -11,17 +11,23 @@ import (
 
 // SourceDTO 是渠道实例的对外表示（config 展开为 JSON 对象）。
 type SourceDTO struct {
-	ID          uint64          `json:"id"`            // 渠道实例ID
-	Name        string          `json:"name"`          // 显示名
-	Type        string          `json:"type"`          // 渠道类型标识
-	Config      json.RawMessage `json:"config"`        // 渠道配置 JSON 对象
-	Interval    int             `json:"interval"`      // 刷新间隔（秒）
-	Enabled     bool            `json:"enabled"`       // 是否启用
-	FailCount   int             `json:"fail_count"`    // 连续失败次数
-	LastError   string          `json:"last_error"`    // 最近一次错误
-	LastEntryAt string          `json:"last_entry_at"` // 最新条目的发布时间
-	CreatedAt   string          `json:"created_at"`    // 创建时间
-	UpdatedAt   string          `json:"updated_at"`    // 更新时间
+	ID            uint64          `json:"id"`              // 渠道实例ID
+	Name          string          `json:"name"`            // 显示名
+	Type          string          `json:"type"`            // 渠道类型标识
+	Config        json.RawMessage `json:"config"`          // 渠道配置 JSON 对象
+	Interval      int             `json:"interval"`        // 刷新间隔（秒）
+	Enabled       bool            `json:"enabled"`         // 是否启用
+	FailCount     int             `json:"fail_count"`      // 连续失败次数
+	LastError     string          `json:"last_error"`      // 最近一次错误
+	LastEntryAt   string          `json:"last_entry_at"`   // 最新条目的发布时间
+	FetchCount    int64           `json:"fetch_count"`     // 累计采集次数
+	SuccessCount  int64           `json:"success_count"`   // 累计成功次数
+	SuccessRate   float64         `json:"success_rate"`    // 成功率（0~1）
+	LastSuccessAt string          `json:"last_success_at"` // 最后成功时间（RFC3339）
+	LastFetchAt   string          `json:"last_fetch_at"`   // 最近一次采集时间（RFC3339）
+	LastElapsedMS int64           `json:"last_elapsed_ms"` // 最近一次耗时（毫秒）
+	CreatedAt     string          `json:"created_at"`      // 创建时间
+	UpdatedAt     string          `json:"updated_at"`      // 更新时间
 }
 
 // SourceListResponse 是渠道列表的响应体。
@@ -56,6 +62,18 @@ func toSourceDTO(s *database.Source) SourceDTO {
 		LastEntryAt: s.LastEntryAt,
 		CreatedAt:   s.CreatedAt,
 		UpdatedAt:   s.UpdatedAt,
+	}
+}
+
+// applyFetchStats 把采集统计写入渠道 DTO，并计算成功率。
+func applyFetchStats(dto *SourceDTO, st database.FetchStats) {
+	dto.FetchCount = st.Total
+	dto.SuccessCount = st.Success
+	dto.LastSuccessAt = st.LastSuccessAt
+	dto.LastFetchAt = st.LastStartedAt
+	dto.LastElapsedMS = st.LastElapsedMS
+	if st.Total > 0 {
+		dto.SuccessRate = float64(st.Success) / float64(st.Total)
 	}
 }
 
@@ -101,12 +119,17 @@ func (s *Server) handleSourceList(w http.ResponseWriter, _ *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	for i := range list {
-		list[i].LastEntryAt = latest[list[i].ID]
+	stats, err := s.db.FetchStatsBySource()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
 	}
 	dtos := make([]SourceDTO, 0, len(list))
 	for i := range list {
-		dtos = append(dtos, toSourceDTO(&list[i]))
+		list[i].LastEntryAt = latest[list[i].ID]
+		dto := toSourceDTO(&list[i])
+		applyFetchStats(&dto, stats[list[i].ID])
+		dtos = append(dtos, dto)
 	}
 	writeJSON(w, http.StatusOK, SourceListResponse{Items: dtos, Total: len(dtos)})
 }
@@ -130,8 +153,15 @@ func (s *Server) handleSourceGet(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	stats, err := s.db.FetchStatsBySource()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 	src.LastEntryAt = latest
-	writeJSON(w, http.StatusOK, toSourceDTO(src))
+	dto := toSourceDTO(src)
+	applyFetchStats(&dto, stats[src.ID])
+	writeJSON(w, http.StatusOK, dto)
 }
 
 // handleSourceUpdate 处理 PUT /api/source/{id}。
@@ -200,6 +230,74 @@ func (s *Server) handleSourceDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// FetchLogDTO 是采集日志的对外表示。
+type FetchLogDTO struct {
+	ID        uint64 `json:"id"`         // 日志ID
+	SourceID  uint64 `json:"source_id"`  // 归属渠道实例ID
+	StartedAt string `json:"started_at"` // 采集开始时间（RFC3339）
+	ElapsedMS int64  `json:"elapsed_ms"` // 耗时（毫秒）
+	Inserted  int    `json:"inserted"`   // 新增条目数
+	Skipped   int    `json:"skipped"`    // 去重跳过数
+	Success   bool   `json:"success"`    // 是否成功
+	Error     string `json:"error"`      // 错误信息（成功为空）
+}
+
+// FetchLogListResponse 是采集日志列表的响应体。
+type FetchLogListResponse struct {
+	Items []FetchLogDTO `json:"items"` // 日志列表（按时间倒序）
+	Total int           `json:"total"` // 返回条数
+}
+
+func toFetchLogDTO(l *database.FetchLog) FetchLogDTO {
+	return FetchLogDTO{
+		ID:        l.ID,
+		SourceID:  l.SourceID,
+		StartedAt: l.StartedAt,
+		ElapsedMS: l.ElapsedMS,
+		Inserted:  l.Inserted,
+		Skipped:   l.Skipped,
+		Success:   l.Success,
+		Error:     l.Error,
+	}
+}
+
+// handleSourceLogs 处理 GET /api/source/{id}/logs（查看某渠道的采集历史）。
+//
+// @Summary      列出渠道采集日志
+// @Description  按时间倒序返回指定渠道最近的采集日志，用于排障
+// @Tags         source
+// @Produce      json
+// @Param        id     path      int  true  "渠道实例ID"
+// @Param        limit  query     int  false "返回条数上限（默认 50，最大 200）"
+// @Success      200    {object}  FetchLogListResponse
+// @Failure      404    {object}  ErrorResponse
+// @Router       /source/{id}/logs [get]
+func (s *Server) handleSourceLogs(w http.ResponseWriter, r *http.Request) {
+	id, ok := parseID(w, r)
+	if !ok {
+		return
+	}
+	if _, err := s.db.GetSource(id); err != nil {
+		if errors.Is(err, database.ErrorSourceNotFound) {
+			writeError(w, http.StatusNotFound, err.Error())
+			return
+		}
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	logs, err := s.db.ListFetchLogs(id, limit)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	items := make([]FetchLogDTO, 0, len(logs))
+	for i := range logs {
+		items = append(items, toFetchLogDTO(&logs[i]))
+	}
+	writeJSON(w, http.StatusOK, FetchLogListResponse{Items: items, Total: len(items)})
 }
 
 // SourceProbeRequest 是探测渠道元信息的请求体（保存前「自动获取」显示名等）。

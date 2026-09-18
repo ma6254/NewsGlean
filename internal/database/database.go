@@ -38,7 +38,7 @@ func Open(driver, dsn string) (*DB, error) {
 // Install 首次建表。新增实体必须在此登记，勿在业务代码里散落 AutoMigrate。
 // 建表后执行一次性迁移（如把旧版 entries.read_later 搬到 entry_state）。
 func (d *DB) Install() error {
-	if err := d.AutoMigrate(&Source{}, &Entry{}, &EntryState{}, &SourceCursor{}); err != nil {
+	if err := d.AutoMigrate(&Source{}, &Entry{}, &EntryState{}, &SourceCursor{}, &FetchLog{}); err != nil {
 		return err
 	}
 	return d.migrateReadLater()

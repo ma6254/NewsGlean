@@ -15,6 +15,7 @@ func (s *Server) routes() *http.ServeMux {
 	mux.HandleFunc("POST /api/source", s.handleSourceCreate)
 	mux.HandleFunc("GET /api/source", s.handleSourceList)
 	mux.HandleFunc("GET /api/source/{id}", s.handleSourceGet)
+	mux.HandleFunc("GET /api/source/{id}/logs", s.handleSourceLogs)
 	mux.HandleFunc("PUT /api/source/{id}", s.handleSourceUpdate)
 	mux.HandleFunc("DELETE /api/source/{id}", s.handleSourceDelete)
 
