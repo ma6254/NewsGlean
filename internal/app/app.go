@@ -34,10 +34,11 @@ func New(cfg *config.Config, db *database.DB) *App {
 
 // RefreshResult 一轮采集的汇总结果。
 type RefreshResult struct {
-	Sources  int      `json:"sources"`  // 处理的渠道数
-	Inserted int      `json:"inserted"` // 新入库条目数
-	Skipped  int      `json:"skipped"`  // 去重跳过的条目数
-	Errors   []string `json:"errors"`   // 错误信息
+	Sources     int      `json:"sources"`      // 处理的渠道数
+	Inserted    int      `json:"inserted"`     // 新入库条目数
+	InsertedIDs []uint64 `json:"inserted_ids"` // 本轮新增条目的 ID（供前端高亮新内容）
+	Skipped     int      `json:"skipped"`      // 去重跳过的条目数
+	Errors      []string `json:"errors"`       // 错误信息
 }
 
 // AddSource 校验并新增渠道实例。校验走适配器的 Validate，失败则不入库。
@@ -70,14 +71,15 @@ func (a *App) RefreshAll(ctx context.Context) (*RefreshResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	result := &RefreshResult{Errors: []string{}}
+	result := &RefreshResult{Errors: []string{}, InsertedIDs: []uint64{}}
 	for i := range sources {
 		if !sources[i].Enabled {
 			continue
 		}
 		result.Sources++
-		ins, skip, err := a.refreshOne(ctx, sources[i])
-		result.Inserted += ins
+		ids, skip, err := a.refreshOne(ctx, sources[i])
+		result.Inserted += len(ids)
+		result.InsertedIDs = append(result.InsertedIDs, ids...)
 		result.Skipped += skip
 		if err != nil {
 			result.Errors = append(result.Errors, fmt.Sprintf("source %d (%s): %v", sources[i].ID, sources[i].Name, err))
@@ -94,54 +96,57 @@ func (a *App) RefreshSource(ctx context.Context, id uint64) (*RefreshResult, err
 	if err != nil {
 		return nil, err
 	}
-	result := &RefreshResult{Sources: 1, Errors: []string{}}
-	ins, skip, err := a.refreshOne(ctx, *s)
-	result.Inserted = ins
+	result := &RefreshResult{Sources: 1, Errors: []string{}, InsertedIDs: []uint64{}}
+	ids, skip, err := a.refreshOne(ctx, *s)
+	result.Inserted = len(ids)
+	result.InsertedIDs = ids
 	result.Skipped = skip
 	if err != nil {
 		result.Errors = append(result.Errors, fmt.Sprintf("source %d (%s): %v", s.ID, s.Name, err))
 		logger.Error("refresh source failed", "id", s.ID, "name", s.Name, "error", err)
 	}
-	logger.Info("refresh source finished", "id", s.ID, "name", s.Name, "inserted", ins, "skipped", skip)
+	logger.Info("refresh source finished", "id", s.ID, "name", s.Name, "inserted", len(ids), "skipped", skip)
 	return result, nil
 }
 
-// refreshOne 拉取单个渠道并写库，返回 (新增数, 去重跳过数, 错误)。
-func (a *App) refreshOne(ctx context.Context, s database.Source) (int, int, error) {
+// refreshOne 拉取单个渠道并写库，返回 (新增条目ID列表, 去重跳过数, 错误)。
+func (a *App) refreshOne(ctx context.Context, s database.Source) ([]uint64, int, error) {
 	conn, err := source.Create(s.Type, s.Config, source.CreateOptions{Proxy: a.cfg.Fetch.Proxy, ChromePath: a.cfg.Fetch.ChromePath})
 	if err != nil {
-		return 0, 0, err
+		return nil, 0, err
 	}
 	defer conn.Close()
 
 	if err := conn.Init(ctx, source.State{}); err != nil {
-		return 0, 0, err
+		return nil, 0, err
 	}
 	items, _, err := conn.Fetch(ctx, nil, defaultFetchLimit)
 	if err != nil {
 		_ = a.db.UpdateSourceHealth(s.ID, s.FailCount+1, err.Error())
-		return 0, 0, err
+		return nil, 0, err
 	}
 
-	inserted, skipped := 0, 0
+	insertedIDs := []uint64{}
+	skipped := 0
 	for _, item := range items {
 		item.SourceID = strconv.FormatUint(s.ID, 10)
-		ok, err := a.ingestItem(s.ID, item)
+		id, ok, err := a.ingestItem(s.ID, item)
 		if err != nil {
-			return inserted, skipped, err
+			return insertedIDs, skipped, err
 		}
 		if ok {
-			inserted++
+			insertedIDs = append(insertedIDs, id)
 		} else {
 			skipped++
 		}
 	}
 	_ = a.db.UpdateSourceHealth(s.ID, 0, "")
-	return inserted, skipped, nil
+	return insertedIDs, skipped, nil
 }
 
-// ingestItem 对单条 Item 做三层去重（GUID → URL → ContentHash）并写库，返回是否入库。
-func (a *App) ingestItem(sourceID uint64, item source.Item) (bool, error) {
+// ingestItem 对单条 Item 做三层去重（GUID → URL → ContentHash）并写库，
+// 返回 (新条目ID, 是否入库, 错误)；跳过时 ID 为 0。
+func (a *App) ingestItem(sourceID uint64, item source.Item) (uint64, bool, error) {
 	guid := item.GUID
 	normURL := filter.NormalizeURL(item.URL)
 
@@ -154,42 +159,42 @@ func (a *App) ingestItem(sourceID uint64, item source.Item) (bool, error) {
 	if guid != "" {
 		exists, err := a.db.EntryExistsByGUID(sourceID, guid)
 		if err != nil {
-			return false, err
+			return 0, false, err
 		}
 		if exists {
-			return false, nil
+			return 0, false, nil
 		}
 	}
 	if normURL != "" {
 		exists, err := a.db.EntryExistsByURL(normURL)
 		if err != nil {
-			return false, err
+			return 0, false, err
 		}
 		if exists {
-			return false, nil
+			return 0, false, nil
 		}
 	}
 	if hash != "" {
 		exists, err := a.db.EntryExistsByHash(hash)
 		if err != nil {
-			return false, err
+			return 0, false, err
 		}
 		if exists {
-			return false, nil
+			return 0, false, nil
 		}
 	}
 
 	// 三者都缺：无任何身份可去重，丢弃并告警
 	if guid == "" && normURL == "" && hash == "" {
 		logger.Warn("dropping item with no identity", "title", item.Title)
-		return false, nil
+		return 0, false, nil
 	}
 
 	entry := entryFromItem(item, sourceID, normURL, hash)
 	if err := a.db.CreateEntry(entry); err != nil {
-		return false, err
+		return 0, false, err
 	}
-	return true, nil
+	return entry.ID, true, nil
 }
 
 // entryFromItem 把规范化条目映射为数据库条目。

@@ -52,6 +52,40 @@
                 }
             }
         },
+        "/entry/read-later": {
+            "get": {
+                "description": "分页列出标记为「稍后再阅」的条目，按加入时间倒序",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "entry"
+                ],
+                "summary": "列出稍后再阅条目",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "页码（从1开始）",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页数量",
+                        "name": "page_size",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.EntryListResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/entry/{id}": {
             "get": {
                 "produces": [
@@ -75,6 +109,59 @@
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/server.EntryDTO"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/entry/{id}/read-later": {
+            "put": {
+                "description": "标记或取消标记条目的「稍后再阅」状态",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "entry"
+                ],
+                "summary": "设置/取消稍后再阅",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "条目ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "{\\",
+                        "name": "req",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.EntryDTO"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
                         }
                     },
                     "404": {
@@ -298,6 +385,13 @@
                     "description": "新入库条目数",
                     "type": "integer"
                 },
+                "inserted_ids": {
+                    "description": "本轮新增条目的 ID（供前端高亮新内容）",
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
                 "skipped": {
                     "description": "去重跳过的条目数",
                     "type": "integer"
@@ -345,6 +439,10 @@
                 "published_at": {
                     "description": "发布时间（RFC3339）",
                     "type": "string"
+                },
+                "read_later": {
+                    "description": "是否已加入「稍后再阅」",
+                    "type": "boolean"
                 },
                 "source_id": {
                     "description": "归属渠道实例ID",

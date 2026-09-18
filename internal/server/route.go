@@ -23,7 +23,9 @@ func (s *Server) routes() *http.ServeMux {
 
 	// 条目读取
 	mux.HandleFunc("GET /api/entry/list", s.handleEntryList)
+	mux.HandleFunc("GET /api/entry/read-later", s.handleReadLaterList)
 	mux.HandleFunc("GET /api/entry/{id}", s.handleEntryGet)
+	mux.HandleFunc("PUT /api/entry/{id}/read-later", s.handleEntrySetReadLater)
 
 	// Swagger UI
 	mux.Handle("/swagger/", httpSwagger.WrapHandler)
