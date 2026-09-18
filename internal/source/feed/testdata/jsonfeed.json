@@ -1,0 +1,16 @@
+{
+  "version": "https://jsonfeed.org/version/1.1",
+  "title": "JSON Feed",
+  "items": [
+    {
+      "id": "jf-1",
+      "url": "https://example.com/jf/1",
+      "title": "JSON Entry",
+      "content_html": "<p>JSON content</p>",
+      "summary": "JSON summary",
+      "date_published": "2023-01-02T15:04:05Z",
+      "author": {"name": "Carol"},
+      "tags": ["news", "world"]
+    }
+  ]
+}

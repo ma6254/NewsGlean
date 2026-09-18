@@ -1,0 +1,260 @@
+package server
+
+import (
+	"encoding/json"
+	"errors"
+	"net/http"
+	"strconv"
+
+	"github.com/ma6254/news-glean/internal/database"
+)
+
+// SourceDTO 是渠道实例的对外表示（config 展开为 JSON 对象）。
+type SourceDTO struct {
+	ID        uint64          `json:"id"`         // 渠道实例ID
+	Name      string          `json:"name"`       // 显示名
+	Type      string          `json:"type"`       // 渠道类型标识
+	Config    json.RawMessage `json:"config"`     // 渠道配置 JSON 对象
+	Interval  int             `json:"interval"`   // 刷新间隔（秒）
+	Enabled   bool            `json:"enabled"`    // 是否启用
+	FailCount int             `json:"fail_count"` // 连续失败次数
+	LastError string          `json:"last_error"` // 最近一次错误
+	CreatedAt string          `json:"created_at"` // 创建时间
+	UpdatedAt string          `json:"updated_at"` // 更新时间
+}
+
+// SourceListResponse 是渠道列表的响应体。
+type SourceListResponse struct {
+	Items []SourceDTO `json:"items"` // 渠道列表
+	Total int         `json:"total"` // 总数
+}
+
+// SourceRequest 是创建/更新渠道的请求体。
+type SourceRequest struct {
+	Name     string          `json:"name"`     // 显示名
+	Type     string          `json:"type"`     // 渠道类型标识
+	Config   json.RawMessage `json:"config"`   // 渠道配置 JSON 对象
+	Interval int             `json:"interval"` // 刷新间隔（秒）
+	Enabled  *bool           `json:"enabled"`  // 是否启用
+}
+
+func toSourceDTO(s *database.Source) SourceDTO {
+	cfg := json.RawMessage(s.Config)
+	if len(cfg) == 0 {
+		cfg = json.RawMessage("{}")
+	}
+	return SourceDTO{
+		ID:        s.ID,
+		Name:      s.Name,
+		Type:      s.Type,
+		Config:    cfg,
+		Interval:  s.Interval,
+		Enabled:   s.Enabled,
+		FailCount: s.FailCount,
+		LastError: s.LastError,
+		CreatedAt: s.CreatedAt,
+		UpdatedAt: s.UpdatedAt,
+	}
+}
+
+// handleSourceCreate 处理 POST /api/source。
+//
+// @Summary      新增渠道实例
+// @Description  校验配置后入库（走适配器 Validate，失败不入库）
+// @Tags         source
+// @Accept       json
+// @Produce      json
+// @Param        req  body      SourceRequest  true  "渠道参数"
+// @Success      200  {object}  SourceDTO
+// @Failure      400  {object}  ErrorResponse
+// @Router       /source [post]
+func (s *Server) handleSourceCreate(w http.ResponseWriter, r *http.Request) {
+	req, ok := decodeSourceRequest(w, r)
+	if !ok {
+		return
+	}
+	src, err := s.app.AddSource(req.Name, req.Type, string(req.Config), req.Interval, *req.Enabled)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, toSourceDTO(src))
+}
+
+// handleSourceList 处理 GET /api/source。
+//
+// @Summary      列出渠道实例
+// @Tags         source
+// @Produce      json
+// @Success      200  {object}  SourceListResponse
+// @Router       /source [get]
+func (s *Server) handleSourceList(w http.ResponseWriter, _ *http.Request) {
+	list, err := s.db.ListSources()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	dtos := make([]SourceDTO, 0, len(list))
+	for i := range list {
+		dtos = append(dtos, toSourceDTO(&list[i]))
+	}
+	writeJSON(w, http.StatusOK, SourceListResponse{Items: dtos, Total: len(dtos)})
+}
+
+// handleSourceGet 处理 GET /api/source/{id}。
+//
+// @Summary      获取单个渠道实例
+// @Tags         source
+// @Produce      json
+// @Param        id  path      int  true  "渠道实例ID"
+// @Success      200  {object}  SourceDTO
+// @Failure      404  {object}  ErrorResponse
+// @Router       /source/{id} [get]
+func (s *Server) handleSourceGet(w http.ResponseWriter, r *http.Request) {
+	src, ok := s.lookupSource(w, r)
+	if !ok {
+		return
+	}
+	writeJSON(w, http.StatusOK, toSourceDTO(src))
+}
+
+// handleSourceUpdate 处理 PUT /api/source/{id}。
+//
+// @Summary      更新渠道实例
+// @Tags         source
+// @Accept       json
+// @Produce      json
+// @Param        id   path      int            true  "渠道实例ID"
+// @Param        req  body      SourceRequest  true  "渠道参数"
+// @Success      200  {object}  SourceDTO
+// @Failure      400  {object}  ErrorResponse
+// @Failure      404  {object}  ErrorResponse
+// @Router       /source/{id} [put]
+func (s *Server) handleSourceUpdate(w http.ResponseWriter, r *http.Request) {
+	src, ok := s.lookupSource(w, r)
+	if !ok {
+		return
+	}
+	req, ok := decodeSourceRequest(w, r)
+	if !ok {
+		return
+	}
+
+	// 仅覆盖请求中给出的字段
+	src.Name = req.Name
+	if req.Type != "" {
+		src.Type = req.Type
+	}
+	if len(req.Config) > 0 {
+		src.Config = string(req.Config)
+	}
+	if req.Interval > 0 {
+		src.Interval = req.Interval
+	}
+	if req.Enabled != nil {
+		src.Enabled = *req.Enabled
+	}
+	if err := s.db.UpdateSource(src); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, toSourceDTO(src))
+}
+
+// handleSourceDelete 处理 DELETE /api/source/{id}（软删除）。
+//
+// @Summary      删除渠道实例（软删除）
+// @Tags         source
+// @Produce      json
+// @Param        id  path      int  true  "渠道实例ID"
+// @Success      200  {object}  map[string]bool
+// @Failure      404  {object}  ErrorResponse
+// @Router       /source/{id} [delete]
+func (s *Server) handleSourceDelete(w http.ResponseWriter, r *http.Request) {
+	id, ok := parseID(w, r)
+	if !ok {
+		return
+	}
+	if err := s.db.DeleteSource(id); err != nil {
+		if errors.Is(err, database.ErrorSourceNotFound) {
+			writeError(w, http.StatusNotFound, err.Error())
+			return
+		}
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// handleRefresh 处理 POST /api/refresh（手动触发一轮采集）。
+//
+// @Summary      手动触发一轮采集
+// @Description  遍历所有启用的渠道拉取新内容并写库（三层去重）
+// @Tags         refresh
+// @Produce      json
+// @Success      200  {object}  app.RefreshResult
+// @Router       /refresh [post]
+func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
+	result, err := s.sched.Refresh(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
+// decodeSourceRequest 解析并校验渠道请求体。config 展开为 JSON 对象。
+func decodeSourceRequest(w http.ResponseWriter, r *http.Request) (SourceRequest, bool) {
+	var req SourceRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
+		return req, false
+	}
+	if req.Name == "" {
+		writeError(w, http.StatusBadRequest, "name is required")
+		return req, false
+	}
+	if req.Type == "" {
+		writeError(w, http.StatusBadRequest, "type is required")
+		return req, false
+	}
+	if len(req.Config) == 0 {
+		req.Config = json.RawMessage("{}")
+	}
+	if req.Interval <= 0 {
+		req.Interval = 1800
+	}
+	if req.Enabled == nil {
+		t := true
+		req.Enabled = &t
+	}
+	return req, true
+}
+
+// lookupSource 按路径 {id} 查找渠道实例，失败时写出错误响应。
+func (s *Server) lookupSource(w http.ResponseWriter, r *http.Request) (*database.Source, bool) {
+	id, ok := parseID(w, r)
+	if !ok {
+		return nil, false
+	}
+	src, err := s.db.GetSource(id)
+	if err != nil {
+		if errors.Is(err, database.ErrorSourceNotFound) {
+			writeError(w, http.StatusNotFound, err.Error())
+			return nil, false
+		}
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return nil, false
+	}
+	return src, true
+}
+
+// parseID 解析路径参数 {id} 为 uint64。
+func parseID(w http.ResponseWriter, r *http.Request) (uint64, bool) {
+	id, err := strconv.ParseUint(r.PathValue("id"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return 0, false
+	}
+	return id, true
+}

@@ -1,51 +1,123 @@
-/*
-Copyright © 2026 NAME HERE <EMAIL ADDRESS>
-
-*/
+// Package cmd 是命令入口。cmd 只解析参数与装配依赖，业务逻辑下沉到 internal/。
 package cmd
 
 import (
+	"context"
+	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/ma6254/news-glean/internal/app"
+	"github.com/ma6254/news-glean/internal/build"
+	"github.com/ma6254/news-glean/internal/config"
+	"github.com/ma6254/news-glean/internal/database"
+	"github.com/ma6254/news-glean/internal/scheduler"
+	"github.com/ma6254/news-glean/internal/server"
+
+	// 注册渠道实现（导入即触发 init 注册到 source 注册表）
+	_ "github.com/ma6254/news-glean/internal/source/feed"
 
 	"github.com/spf13/cobra"
 )
 
+var (
+	cfgPath string // 配置文件路径
+	workDir string // 工作目录
+)
 
-
-// rootCmd represents the base command when called without any subcommands
+// rootCmd 是根命令，等价于启动常驻服务（serve）。
 var rootCmd = &cobra.Command{
 	Use:   "news-glean",
-	Short: "A brief description of your application",
-	Long: `A longer description that spans multiple lines and likely contains
-examples and usage of using your application. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
-	// Uncomment the following line if your bare application
-	// has an action associated with it:
-	// Run: func(cmd *cobra.Command, args []string) { },
+	Short: "拾取、清洗、归档你关心的内容",
+	Long: `NewsGlean 把 RSS、网页、聊天机器人里的信息统一成同一个阅读流。
+默认启动常驻服务，提供 /api 与 Web 界面。`,
+	RunE: runServe,
 }
 
-// Execute adds all child commands to the root command and sets flags appropriately.
-// This is called by main.main(). It only needs to happen once to the rootCmd.
-func Execute() {
-	err := rootCmd.Execute()
-	if err != nil {
-		os.Exit(1)
-	}
+// versionCmd 打印版本信息。
+var versionCmd = &cobra.Command{
+	Use:   "version",
+	Short: "打印版本信息",
+	Run: func(_ *cobra.Command, _ []string) {
+		fmt.Printf("news-glean %s (build %s)\n", build.BuildVersion, build.BuildTime)
+	},
 }
 
 func init() {
-	// Here you will define your flags and configuration settings.
-	// Cobra supports persistent flags, which, if defined here,
-	// will be global for your application.
-
-	// rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.news-glean.yaml)")
-
-	// Cobra also supports local flags, which will only run
-	// when this action is called directly.
-	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	rootCmd.PersistentFlags().StringVarP(&cfgPath, "config", "c", "", "配置文件路径（默认 ./config.yml）")
+	rootCmd.PersistentFlags().StringVarP(&workDir, "dir", "d", "", "工作目录，启动前切换")
+	rootCmd.AddCommand(versionCmd)
 }
 
+// runServe 装配依赖并启动服务，直到收到退出信号。
+func runServe(cmd *cobra.Command, _ []string) error {
+	// 切换工作目录，此后相对路径（数据库、导出目录）都基于它解析
+	if workDir != "" {
+		if err := os.Chdir(workDir); err != nil {
+			return fmt.Errorf("chdir: %w", err)
+		}
+	}
+	if cfgPath == "" {
+		cfgPath = "./config.yml"
+	}
 
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// 首次运行无配置文件，使用内置默认值
+			cfg = config.Default()
+		} else {
+			return fmt.Errorf("load config: %w", err)
+		}
+	}
+
+	driver := cfg.Database.Driver
+	if driver == "" {
+		driver = "sqlite"
+	}
+	dsn := cfg.Database.SQLite.File
+	if dsn == "" {
+		dsn = "./data.db"
+	}
+
+	db, err := database.Open(driver, dsn)
+	if err != nil {
+		return fmt.Errorf("open database: %w", err)
+	}
+	if err := db.Install(); err != nil {
+		return fmt.Errorf("install database: %w", err)
+	}
+
+	a := app.New(cfg, db)
+	sched := scheduler.New(a)
+	srv := server.New(cfg, db, a, sched)
+
+	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- srv.Run()
+	}()
+
+	fmt.Printf("news-glean serving on http://%s\n", cfg.Server.HTTPAddr)
+	fmt.Printf("swagger UI: http://%s/swagger/index.html\n", cfg.Server.HTTPAddr)
+
+	select {
+	case err := <-errCh:
+		return err
+	case <-ctx.Done():
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		return srv.Stop(shutdownCtx)
+	}
+}
+
+// Execute 是程序入口，由 main 调用。
+func Execute() {
+	if err := rootCmd.Execute(); err != nil {
+		os.Exit(1)
+	}
+}

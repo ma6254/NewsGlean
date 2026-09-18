@@ -1,0 +1,340 @@
+basePath: /api
+definitions:
+  app.RefreshResult:
+    properties:
+      errors:
+        description: 错误信息
+        items:
+          type: string
+        type: array
+      inserted:
+        description: 新入库条目数
+        type: integer
+      skipped:
+        description: 去重跳过的条目数
+        type: integer
+      sources:
+        description: 处理的渠道数
+        type: integer
+    type: object
+  server.EntryDTO:
+    properties:
+      author:
+        description: 作者
+        type: string
+      content:
+        description: 正文
+        type: string
+      content_type:
+        description: 内容类型
+        type: string
+      extra:
+        additionalProperties:
+          type: string
+        description: 渠道特有字段
+        type: object
+      fetched_at:
+        description: 抓取时间（RFC3339）
+        type: string
+      guid:
+        description: 渠道自带稳定ID
+        type: string
+      id:
+        description: 条目ID
+        type: integer
+      published_at:
+        description: 发布时间（RFC3339）
+        type: string
+      source_id:
+        description: 归属渠道实例ID
+        type: integer
+      summary:
+        description: 摘要
+        type: string
+      tags:
+        description: 标签
+        items:
+          type: string
+        type: array
+      title:
+        description: 标题
+        type: string
+      url:
+        description: 规范化后的链接
+        type: string
+    type: object
+  server.EntryListResponse:
+    properties:
+      items:
+        description: 条目列表
+        items:
+          $ref: '#/definitions/server.EntryDTO'
+        type: array
+      page:
+        description: 页码
+        type: integer
+      page_size:
+        description: 每页数量
+        type: integer
+      total:
+        description: 总数
+        type: integer
+    type: object
+  server.ErrorResponse:
+    properties:
+      error:
+        description: 错误信息
+        type: string
+    type: object
+  server.SourceDTO:
+    properties:
+      config:
+        description: 渠道配置 JSON 对象
+        items:
+          type: integer
+        type: array
+      created_at:
+        description: 创建时间
+        type: string
+      enabled:
+        description: 是否启用
+        type: boolean
+      fail_count:
+        description: 连续失败次数
+        type: integer
+      id:
+        description: 渠道实例ID
+        type: integer
+      interval:
+        description: 刷新间隔（秒）
+        type: integer
+      last_error:
+        description: 最近一次错误
+        type: string
+      name:
+        description: 显示名
+        type: string
+      type:
+        description: 渠道类型标识
+        type: string
+      updated_at:
+        description: 更新时间
+        type: string
+    type: object
+  server.SourceListResponse:
+    properties:
+      items:
+        description: 渠道列表
+        items:
+          $ref: '#/definitions/server.SourceDTO'
+        type: array
+      total:
+        description: 总数
+        type: integer
+    type: object
+  server.SourceRequest:
+    properties:
+      config:
+        description: 渠道配置 JSON 对象
+        items:
+          type: integer
+        type: array
+      enabled:
+        description: 是否启用
+        type: boolean
+      interval:
+        description: 刷新间隔（秒）
+        type: integer
+      name:
+        description: 显示名
+        type: string
+      type:
+        description: 渠道类型标识
+        type: string
+    type: object
+info:
+  contact: {}
+  description: 拾取、清洗、归档你关心的内容。把 RSS、网页、聊天机器人里的信息统一成同一个阅读流。
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  title: NewsGlean API
+  version: 0.1.0
+paths:
+  /entry/{id}:
+    get:
+      parameters:
+      - description: 条目ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.EntryDTO'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: 获取单个条目
+      tags:
+      - entry
+  /entry/list:
+    get:
+      description: 分页列出条目，可按渠道过滤
+      parameters:
+      - description: 页码（从1开始）
+        in: query
+        name: page
+        type: integer
+      - description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      - description: 按渠道过滤
+        in: query
+        name: source_id
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.EntryListResponse'
+      summary: 列出条目
+      tags:
+      - entry
+  /refresh:
+    post:
+      description: 遍历所有启用的渠道拉取新内容并写库（三层去重）
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/app.RefreshResult'
+      summary: 手动触发一轮采集
+      tags:
+      - refresh
+  /source:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.SourceListResponse'
+      summary: 列出渠道实例
+      tags:
+      - source
+    post:
+      consumes:
+      - application/json
+      description: 校验配置后入库（走适配器 Validate，失败不入库）
+      parameters:
+      - description: 渠道参数
+        in: body
+        name: req
+        required: true
+        schema:
+          $ref: '#/definitions/server.SourceRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.SourceDTO'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: 新增渠道实例
+      tags:
+      - source
+  /source/{id}:
+    delete:
+      parameters:
+      - description: 渠道实例ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: boolean
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: 删除渠道实例（软删除）
+      tags:
+      - source
+    get:
+      parameters:
+      - description: 渠道实例ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.SourceDTO'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: 获取单个渠道实例
+      tags:
+      - source
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: 渠道实例ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 渠道参数
+        in: body
+        name: req
+        required: true
+        schema:
+          $ref: '#/definitions/server.SourceRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.SourceDTO'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: 更新渠道实例
+      tags:
+      - source
+swagger: "2.0"

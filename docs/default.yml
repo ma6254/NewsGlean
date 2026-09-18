@@ -1,0 +1,71 @@
+# NewsGlean 默认配置。build.ps1 首次构建时复制到 release/config.yml。
+# 配置优先级：命令行参数 > 环境变量 > 配置文件 > 内置默认值。
+
+# 日志参数
+log:
+  dir: "log"          # 日志文件路径
+  level: "info"       # 日志级别：debug, info, warn, error
+  max_size: 10        # 日志文件最大大小（MB）
+  max_backups: 5      # 最大备份数量
+  max_age: 30         # 最大保存天数
+
+# HTTP 服务参数
+server:
+  http_addr: "127.0.0.1:28080"  # 默认仅监听本机
+  base_url: ""                 # 反向代理/公网回调场景下的外部地址
+
+# Web 前端参数
+web:
+  mode: embed                  # 前端加入方式：embed（默认，内嵌二进制）| proxy（反代外部服务）| dir（本地目录）| gz（打包文件）| off（仅 API）
+  proxy_url: "http://127.0.0.1:38080"  # mode=proxy 时的前端服务地址（Vite dev server）
+  dir: "./web"                 # mode=dir 时的静态资源目录
+  archive: ""                  # mode=gz 时的打包文件路径（.tar.gz）
+
+# 数据库参数
+database:
+  driver: "sqlite"    # sqlite（默认）| mysql
+  sqlite:
+    file: "./data.db"
+  mysql:
+    host: "127.0.0.1"
+    port: 3306
+    user: ""
+    password: ""
+    database: "news_glean"
+
+# 采集参数
+fetch:
+  interval: 30m                # 全局默认刷新间隔
+  concurrency: 4               # 并发采集上限
+  timeout: 20s
+  user_agent: "NewsGlean/0.1 (+https://github.com/ma6254/news-glean)"
+  proxy: ""                    # 留空则读环境变量
+  chrome_path: ""              # Chrome 可执行文件路径，留空自动探测（chromedp 抓取用）
+  full_text: false             # 是否对全部渠道抓取正文
+
+# 凭据引用方式。适配器读取凭据时统一走这一层，不直接读环境变量。
+credentials:
+  store: env                   # env（默认，仅存变量名）| file（加密落盘）
+  passphrase_env: NEWSGLEAN_MASTER_KEY
+
+# 渠道实例的实际配置存数据库，不写这里，避免配置文件被误提交时泄露渠道参数
+
+# 过滤
+filter:
+  dedup: true
+  cross_source_dedup: true     # 跨渠道内容指纹去重
+  rules: []                    # 过滤规则
+
+# LLM（可选）
+llm:
+  enabled: false               # 关闭时以下字段全部忽略
+  base_url: "https://api.openai.com/v1"
+  api_key: ""
+  model: ""
+  summarize: false
+  classify: false
+
+# 导出
+export:
+  markdown_dir: "./export"
+  epub: false
