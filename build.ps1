@@ -42,7 +42,7 @@ if (Test-Path (Join-Path $webDist "index.html")) {
 }
 
 Write-Host "building $Package @ $BuildVersion ..."
-go build -ldflags $LdFlags -o (Join-Path $Root "release\app.exe") .
+go build -tags sqlite_fts5 -ldflags $LdFlags -o (Join-Path $Root "release\app.exe") .
 
 # copy default config to release/ on first build
 $targetCfg = Join-Path $Root "release\config.yml"

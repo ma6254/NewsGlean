@@ -40,5 +40,8 @@ func (d *DB) Install() error {
 	if err := d.AutoMigrate(&Source{}, &Entry{}, &EntryState{}, &SourceCursor{}, &FetchLog{}); err != nil {
 		return err
 	}
-	return d.migrateReadLater()
+	if err := d.migrateReadLater(); err != nil {
+		return err
+	}
+	return d.installFTS()
 }
