@@ -69,6 +69,7 @@ type MySQLConfig struct {
 type FetchConfig struct {
 	Interval    string `yaml:"interval"`    // 全局默认刷新间隔
 	Concurrency int    `yaml:"concurrency"` // 并发采集上限
+	RateLimit   string `yaml:"rate_limit"`  // 后台采集全局请求最小间隔（礼貌限速），如 "1s"；空或 "0" 表示不限速
 	Timeout     string `yaml:"timeout"`     // 单次抓取超时
 	UserAgent   string `yaml:"user_agent"`  // 采集请求的 User-Agent
 	Proxy       string `yaml:"proxy"`       // 代理地址，留空则读环境变量
@@ -139,6 +140,7 @@ func Default() *Config {
 		Fetch: FetchConfig{
 			Interval:    "30m",
 			Concurrency: 4,
+			RateLimit:   "1s",
 			Timeout:     "20s",
 			UserAgent:   "NewsGlean/0.1 (+https://github.com/ma6254/news-glean)",
 			Proxy:       "",

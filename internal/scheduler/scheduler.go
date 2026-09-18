@@ -1,6 +1,8 @@
 // Package scheduler 负责采集调度。
 // 阶段 1 落地定时后台调度：ticker 扫描 + 按渠道 interval 决定到期时间 + 全局并发上限，
-// 挂上服务即自动按间隔刷新，无需手动触发；手动触发入口（Refresh / RefreshSource）保留。
+// 挂上服务即自动按间隔刷新，无需手动触发。
+// 阶段 2 落地礼貌限速 + 健康度自动降频：全局请求最小间隔限速；连续失败按指数退避降频，成功即回升。
+// 手动触发入口（Refresh / RefreshSource）保留，且不受后台限速影响（用户显式动作即刻执行）。
 package scheduler
 
 import (
@@ -11,6 +13,7 @@ import (
 	"github.com/ma6254/news-glean/internal/app"
 	"github.com/ma6254/news-glean/internal/config"
 	"github.com/ma6254/news-glean/internal/database"
+	"github.com/ma6254/news-glean/internal/fetch"
 	"github.com/ma6254/news-glean/log"
 )
 
@@ -21,6 +24,13 @@ const (
 
 	// fallbackInterval 是全局默认刷新间隔的兜底值，配置缺失或解析失败时使用。
 	fallbackInterval = 30 * time.Minute
+
+	// maxBackoff 是连续失败退避的上限：再失败也不会把间隔拉得比这更长。
+	maxBackoff = 24 * time.Hour
+
+	// maxBackoffExp 是退避指数封顶：failCount 超过该值后间隔不再翻倍（2^maxBackoffExp）。
+	// 例如基础 30m、封顶 6 次后：30m → 1h → 2h → 4h → 8h → 16h → 32h(封顶 24h)。
+	maxBackoffExp = 6
 )
 
 // logger 是调度器的日志器，带 scheduler tag。
@@ -31,9 +41,10 @@ type Scheduler struct {
 	app *app.App
 	db  *database.DB
 
-	scanInterval    time.Duration // 调度扫描粒度
-	defaultInterval time.Duration // 全局默认刷新间隔（fetch.interval）
-	concurrency     int           // 全局并发采集上限（fetch.concurrency）
+	scanInterval    time.Duration  // 调度扫描粒度
+	defaultInterval time.Duration  // 全局默认刷新间隔（fetch.interval）
+	concurrency     int            // 全局并发采集上限（fetch.concurrency）
+	rate            *fetch.Limiter // 全局请求间隔限速器（fetch.rate_limit）
 
 	mu      sync.Mutex
 	nextRun map[uint64]time.Time // 每个渠道下一次可运行的时间
@@ -61,6 +72,7 @@ func New(cfg *config.Config, db *database.DB, a *app.App) *Scheduler {
 		scanInterval:    scanInterval,
 		defaultInterval: defInterval,
 		concurrency:     concurrency,
+		rate:            fetch.NewLimiter(parseDuration(cfg.Fetch.RateLimit)),
 		nextRun:         map[uint64]time.Time{},
 		running:         map[uint64]bool{},
 		sem:             make(chan struct{}, concurrency),
@@ -161,8 +173,8 @@ func (s *Scheduler) scheduleDue(ctx context.Context) {
 	}
 }
 
-// runOne 采集单个渠道：先拿并发令牌，再执行拉取，最后登记下一次到期时间。
-// 失败不阻塞调度节奏，下一轮按 interval 再次尝试；连续失败降频属阶段 2。
+// runOne 采集单个渠道：拿并发令牌 → 等待全局限速放行 → 拉取 → 按健康度登记下一次到期时间。
+// 连续失败按指数退避降频（effectiveInterval），成功则回落基准间隔。
 func (s *Scheduler) runOne(ctx context.Context, id uint64, name string, intervalSec int) {
 	defer s.wg.Done()
 
@@ -175,17 +187,36 @@ func (s *Scheduler) runOne(ctx context.Context, id uint64, name string, interval
 	}
 	defer func() { <-s.sem }()
 
+	// 全局请求间隔限速：保证相邻两次采集起点至少间隔 fetch.rate_limit，避免齐发。
+	if err := s.rate.Wait(ctx); err != nil {
+		s.clearRunning(id)
+		return
+	}
+
 	start := time.Now()
-	_, err := s.app.RefreshSource(ctx, id)
-	interval := s.effectiveInterval(intervalSec)
+	_, refreshErr := s.app.RefreshSource(ctx, id) // 失败已由 app 层计入 FailCount 与日志
+
+	// 重读渠道最新状态，按连续失败次数计算下一次到期（降频）；成功则 FailCount 归零、回升基准。
+	base := intervalSec
+	failCount := 0
+	if fresh, err := s.db.GetSource(id); err == nil {
+		base = fresh.Interval
+		failCount = fresh.FailCount
+	} else if refreshErr != nil {
+		// 渠道在采集期间被删除或库异常，取不到健康度，仅记录不降频。
+		logger.Debug("scheduled refresh source lookup failed", "id", id, "name", name, "error", err)
+	}
+	interval := s.effectiveInterval(base, failCount)
+
+	elapsed := time.Since(start)
 	switch {
-	case err != nil && ctx.Err() != nil:
+	case refreshErr != nil && ctx.Err() != nil:
 		// 停机取消导致的失败不算故障，降为 debug 避免刷错误日志。
 		logger.Debug("scheduled refresh cancelled", "id", id, "name", name)
-	case err != nil:
-		logger.Error("scheduled refresh failed", "id", id, "name", name, "error", err, "elapsed", time.Since(start).String())
+	case failCount > 0:
+		logger.Warn("scheduled refresh failed", "id", id, "name", name, "fail_count", failCount, "next_interval", interval.String(), "elapsed", elapsed.String())
 	default:
-		logger.Info("scheduled refresh ok", "id", id, "name", name, "elapsed", time.Since(start).String())
+		logger.Info("scheduled refresh ok", "id", id, "name", name, "next_interval", interval.String(), "elapsed", elapsed.String())
 	}
 
 	// 完成后再登记下一次到期时间，避免拉取耗时超过 interval 时同渠道并发重入。
@@ -202,12 +233,31 @@ func (s *Scheduler) clearRunning(id uint64) {
 	s.mu.Unlock()
 }
 
-// effectiveInterval 返回渠道的有效刷新间隔：渠道 interval 无效时回退到全局默认值。
-func (s *Scheduler) effectiveInterval(intervalSec int) time.Duration {
+// effectiveInterval 返回渠道的有效刷新间隔：
+//   - intervalSec ≤ 0 时回退到全局默认间隔；
+//   - 连续失败 failCount > 0 时按 2^failCount 指数退避，封顶 maxBackoff（且不低于基础间隔）。
+func (s *Scheduler) effectiveInterval(intervalSec, failCount int) time.Duration {
+	base := s.defaultInterval
 	if intervalSec > 0 {
-		return time.Duration(intervalSec) * time.Second
+		base = time.Duration(intervalSec) * time.Second
 	}
-	return s.defaultInterval
+	if failCount <= 0 {
+		return base
+	}
+
+	shift := failCount
+	if shift > maxBackoffExp {
+		shift = maxBackoffExp
+	}
+	cap_ := maxBackoff
+	if base > cap_ {
+		cap_ = base // 基础间隔已超过退避上限时，降频不应把间隔拉回更短的值
+	}
+	factor := time.Duration(int64(1) << uint(shift))
+	if base > cap_/factor {
+		return cap_
+	}
+	return base * factor
 }
 
 // parseDuration 解析时长字符串（如 "30m"、"20s"），失败返回 0。

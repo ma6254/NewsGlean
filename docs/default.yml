@@ -37,6 +37,7 @@ database:
 fetch:
   interval: 30m                # 全局默认刷新间隔
   concurrency: 4               # 并发采集上限
+  rate_limit: 1s               # 后台采集全局请求最小间隔（礼貌限速）；空或 0 表示不限速
   timeout: 20s
   user_agent: "NewsGlean/0.1 (+https://github.com/ma6254/news-glean)"
   proxy: ""                    # 留空则读环境变量
