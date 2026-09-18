@@ -35,7 +35,8 @@ var rootCmd = &cobra.Command{
 	Short: "拾取、清洗、归档你关心的内容",
 	Long: `NewsGlean 把 RSS、网页、聊天机器人里的信息统一成同一个阅读流。
 默认启动常驻服务，提供 /api 与 Web 界面。`,
-	RunE: runServe,
+	RunE:         runServe,
+	SilenceUsage: true, // 出错时不刷 usage，只打印 Error 行
 }
 
 // versionCmd 打印版本信息。
@@ -136,7 +137,11 @@ func runServe(cmd *cobra.Command, _ []string) error {
 		sched.Stop()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		return srv.Stop(shutdownCtx)
+		// 信号触发的关停是正常退出，不算错误；超时只记告警，不返回非零错误。
+		if err := srv.Stop(shutdownCtx); err != nil {
+			log.Warn("graceful shutdown timed out", "error", err)
+		}
+		return nil
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net"
 	"net/http"
+	"sync"
 
 	"github.com/ma6254/news-glean/internal/app"
 	"github.com/ma6254/news-glean/internal/config"
@@ -22,11 +23,20 @@ type Server struct {
 	sched *scheduler.Scheduler
 	mux   *http.ServeMux
 	http  *http.Server
+
+	stopOnce   sync.Once
+	shutdownCh chan struct{} // 关停信号：Stop 时关闭，让 SSE 等长连接立即退出
 }
 
 // New 构造 Server 并注册路由。
 func New(cfg *config.Config, db *database.DB, a *app.App, sched *scheduler.Scheduler) *Server {
-	srv := &Server{cfg: cfg, db: db, app: a, sched: sched}
+	srv := &Server{
+		cfg:        cfg,
+		db:         db,
+		app:        a,
+		sched:      sched,
+		shutdownCh: make(chan struct{}),
+	}
 	srv.mux = srv.routes()
 	return srv
 }
@@ -49,10 +59,13 @@ func (s *Server) Run() error {
 }
 
 // Stop 优雅关闭 HTTP 服务。
+// 先广播关停信号让 SSE 等长连接立即退出，再执行 Shutdown；否则 Shutdown 会
+// 一直等待那些由心跳保活的长连接，最终超时返回 context deadline exceeded。
 func (s *Server) Stop(ctx context.Context) error {
 	if s.http == nil {
 		return nil
 	}
+	s.stopOnce.Do(func() { close(s.shutdownCh) })
 	return s.http.Shutdown(ctx)
 }
 

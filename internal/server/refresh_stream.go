@@ -44,6 +44,9 @@ func (s *Server) handleRefreshStream(w http.ResponseWriter, r *http.Request) {
 		select {
 		case <-ctx.Done():
 			return
+		case <-s.shutdownCh:
+			// 服务关停：立即退出，让 Shutdown 能及时完成而不是等满超时。
+			return
 		case <-heartbeat.C:
 			fmt.Fprint(w, ": ping\n\n")
 			flusher.Flush()
