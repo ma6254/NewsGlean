@@ -18,6 +18,9 @@ func (s *Server) routes() *http.ServeMux {
 	mux.HandleFunc("PUT /api/source/{id}", s.handleSourceUpdate)
 	mux.HandleFunc("DELETE /api/source/{id}", s.handleSourceDelete)
 
+	// 渠道元信息探测（保存前「自动获取显示名」）
+	mux.HandleFunc("POST /api/source/probe", s.handleSourceProbe)
+
 	// 手动触发采集
 	mux.HandleFunc("POST /api/refresh", s.handleRefresh)
 

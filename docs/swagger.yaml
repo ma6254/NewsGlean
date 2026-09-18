@@ -143,6 +143,17 @@ definitions:
         description: 总数
         type: integer
     type: object
+  server.SourceProbeRequest:
+    properties:
+      config:
+        description: 渠道配置 JSON 对象
+        items:
+          type: integer
+        type: array
+      type:
+        description: 渠道类型标识
+        type: string
+    type: object
   server.SourceRequest:
     properties:
       config:
@@ -161,6 +172,12 @@ definitions:
         type: string
       type:
         description: 渠道类型标识
+        type: string
+    type: object
+  source.ProbeInfo:
+    properties:
+      title:
+        description: 渠道标题（如 feed 的 <title>），可能为空
         type: string
     type: object
 info:
@@ -403,6 +420,32 @@ paths:
           schema:
             $ref: '#/definitions/server.ErrorResponse'
       summary: 更新渠道实例
+      tags:
+      - source
+  /source/probe:
+    post:
+      consumes:
+      - application/json
+      description: 在保存前探测渠道元信息（如 feed 标题），供「自动获取显示名」使用
+      parameters:
+      - description: 渠道类型与配置
+        in: body
+        name: req
+        required: true
+        schema:
+          $ref: '#/definitions/server.SourceProbeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/source.ProbeInfo'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: 探测渠道元信息
       tags:
       - source
 swagger: "2.0"

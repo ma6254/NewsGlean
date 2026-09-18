@@ -168,6 +168,39 @@ func TestSourceValidation(t *testing.T) {
 	}
 }
 
+func TestSourceProbe(t *testing.T) {
+	feedSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/rss+xml")
+		_, _ = w.Write([]byte(rssBody))
+	}))
+	defer feedSrv.Close()
+
+	ts := newTestServer(t)
+
+	// 合法 feed 地址应探测出标题（rssBody 的 <title>IT</title>）
+	probe := doJSON(t, http.MethodPost, ts.URL+"/api/source/probe",
+		`{"type":"feed","config":{"url":"`+feedSrv.URL+`"}}`)
+	if probe.status != http.StatusOK {
+		t.Fatalf("probe status = %d, body = %s", probe.status, probe.body)
+	}
+	var info struct {
+		Title string `json:"title"`
+	}
+	if err := json.Unmarshal(probe.body, &info); err != nil {
+		t.Fatalf("unmarshal probe result: %v", err)
+	}
+	if info.Title != "IT" {
+		t.Fatalf("title = %q, want IT", info.Title)
+	}
+
+	// 未知渠道类型应报 400
+	bad := doJSON(t, http.MethodPost, ts.URL+"/api/source/probe",
+		`{"type":"nope","config":{}}`)
+	if bad.status != http.StatusBadRequest {
+		t.Fatalf("expected 400 for unknown type, got %d body=%s", bad.status, bad.body)
+	}
+}
+
 // TestWebEmbedServesIndex 验证默认（embed 模式）下 / 能返回内嵌前端页面。
 func TestWebEmbedServesIndex(t *testing.T) {
 	ts := newTestServer(t)

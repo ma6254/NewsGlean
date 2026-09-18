@@ -257,6 +257,46 @@ const docTemplate = `{
                 }
             }
         },
+        "/source/probe": {
+            "post": {
+                "description": "在保存前探测渠道元信息（如 feed 标题），供「自动获取显示名」使用",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "source"
+                ],
+                "summary": "探测渠道元信息",
+                "parameters": [
+                    {
+                        "description": "渠道类型与配置",
+                        "name": "req",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/server.SourceProbeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/source.ProbeInfo"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/source/{id}": {
             "get": {
                 "produces": [
@@ -577,6 +617,22 @@ const docTemplate = `{
                 }
             }
         },
+        "server.SourceProbeRequest": {
+            "type": "object",
+            "properties": {
+                "config": {
+                    "description": "渠道配置 JSON 对象",
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "type": {
+                    "description": "渠道类型标识",
+                    "type": "string"
+                }
+            }
+        },
         "server.SourceRequest": {
             "type": "object",
             "properties": {
@@ -601,6 +657,15 @@ const docTemplate = `{
                 },
                 "type": {
                     "description": "渠道类型标识",
+                    "type": "string"
+                }
+            }
+        },
+        "source.ProbeInfo": {
+            "type": "object",
+            "properties": {
+                "title": {
+                    "description": "渠道标题（如 feed 的 \u003ctitle\u003e），可能为空",
                     "type": "string"
                 }
             }

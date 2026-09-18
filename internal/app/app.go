@@ -65,6 +65,24 @@ func (a *App) AddSource(name, typ, cfgJSON string, interval int, enabled bool) (
 	return s, nil
 }
 
+// ProbeSource 在保存前探测渠道元信息（如 feed 标题）。
+// 仅当渠道类型实现了 source.Prober 时可用，否则返回 source.ErrProbeUnsupported。
+func (a *App) ProbeSource(ctx context.Context, typ, cfgJSON string) (source.ProbeInfo, error) {
+	conn, err := source.Create(typ, cfgJSON, source.CreateOptions{Proxy: a.cfg.Fetch.Proxy, ChromePath: a.cfg.Fetch.ChromePath})
+	if err != nil {
+		return source.ProbeInfo{}, err
+	}
+	defer conn.Close()
+	if err := conn.Validate(ctx); err != nil {
+		return source.ProbeInfo{}, err
+	}
+	prober, ok := conn.(source.Prober)
+	if !ok {
+		return source.ProbeInfo{}, source.ErrProbeUnsupported
+	}
+	return prober.Probe(ctx)
+}
+
 // RefreshAll 手动触发一轮采集，遍历所有启用的渠道。
 func (a *App) RefreshAll(ctx context.Context) (*RefreshResult, error) {
 	sources, err := a.db.ListSources()

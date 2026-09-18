@@ -128,6 +128,63 @@ func TestParseJSONFeed(t *testing.T) {
 	}
 }
 
+func TestParseFeedTitle(t *testing.T) {
+	cases := []struct {
+		name string
+		file string
+		want string
+	}{
+		{"rss", "rss2.xml", "Test Feed"},
+		{"atom", "atom.xml", "Atom Feed"},
+		{"jsonfeed", "jsonfeed.json", "JSON Feed"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			title, err := parseFeedTitle(readTestdata(t, tc.file))
+			if err != nil {
+				t.Fatalf("parseFeedTitle: %v", err)
+			}
+			if title != tc.want {
+				t.Errorf("title = %q, want %q", title, tc.want)
+			}
+		})
+	}
+
+	if _, err := parseFeedTitle(readTestdata(t, "malformed.xml")); err == nil {
+		t.Fatal("expected error for malformed XML")
+	}
+	if _, err := parseFeedTitle([]byte("   ")); err == nil {
+		t.Fatal("expected error for empty body")
+	}
+}
+
+func TestProbe(t *testing.T) {
+	feedBody := readTestdata(t, "rss2.xml")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/rss+xml")
+		_, _ = w.Write(feedBody)
+	}))
+	defer srv.Close()
+
+	conn, err := New(`{"url":"`+srv.URL+`"}`, source.CreateOptions{})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer conn.Close()
+
+	prober, ok := conn.(source.Prober)
+	if !ok {
+		t.Fatal("connector should implement source.Prober")
+	}
+	info, err := prober.Probe(context.Background())
+	if err != nil {
+		t.Fatalf("Probe: %v", err)
+	}
+	if info.Title != "Test Feed" {
+		t.Errorf("title = %q, want %q", info.Title, "Test Feed")
+	}
+}
+
 func TestParseMalformed(t *testing.T) {
 	if _, err := parseFeed(readTestdata(t, "malformed.xml")); err == nil {
 		t.Fatal("expected error for malformed XML")

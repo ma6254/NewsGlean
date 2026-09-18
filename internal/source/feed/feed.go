@@ -138,6 +138,27 @@ func (c *connector) Fetch(ctx context.Context, cursor source.Cursor, limit int) 
 	return items, newCursor, nil
 }
 
+// Probe 实现 source.Prober：抓取并解析 feed 标题，供前端「自动获取显示名」使用。
+// 复用与 Fetch 一致的抓取逻辑与超时约束。
+func (c *connector) Probe(ctx context.Context) (source.ProbeInfo, error) {
+	var body []byte
+	var err error
+	switch c.mode {
+	case fetchModeChrome, fetchModeChromeHeaded:
+		body, err = c.fetchChrome(ctx)
+	default:
+		body, _, _, err = c.fetchHTTP(ctx, nil)
+	}
+	if err != nil {
+		return source.ProbeInfo{}, err
+	}
+	title, err := parseFeedTitle(body)
+	if err != nil {
+		return source.ProbeInfo{}, err
+	}
+	return source.ProbeInfo{Title: title}, nil
+}
+
 // fetchHTTP 用 net/http 抓取，支持 ETag/Last-Modified 条件请求。
 // unchanged 为 true 表示命中 304、无新内容。
 func (c *connector) fetchHTTP(ctx context.Context, cursor source.Cursor) (body []byte, newCursor source.Cursor, unchanged bool, err error) {
@@ -217,6 +238,47 @@ func parseFeed(data []byte) ([]source.Item, error) {
 	}
 }
 
+// parseFeedTitle 依据响应体判断格式并提取 feed 标题（RSS channel/title、Atom feed/title、JSON Feed title）。
+func parseFeedTitle(data []byte) (string, error) {
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) == 0 {
+		return "", errors.New("feed: empty response body")
+	}
+	switch trimmed[0] {
+	case '{', '[':
+		var doc jsonFeedDoc
+		if err := json.Unmarshal(trimmed, &doc); err != nil {
+			return "", fmt.Errorf("feed: invalid JSON Feed: %w", err)
+		}
+		return strings.TrimSpace(doc.Title), nil
+	case '<':
+		var root struct {
+			XMLName xml.Name
+		}
+		if err := xml.Unmarshal(trimmed, &root); err != nil {
+			return "", fmt.Errorf("feed: invalid XML: %w", err)
+		}
+		switch root.XMLName.Local {
+		case "rss":
+			var doc rssDoc
+			if err := xml.Unmarshal(trimmed, &doc); err != nil {
+				return "", fmt.Errorf("feed: invalid RSS: %w", err)
+			}
+			return strings.TrimSpace(doc.Channel.Title), nil
+		case "feed":
+			var doc atomDoc
+			if err := xml.Unmarshal(trimmed, &doc); err != nil {
+				return "", fmt.Errorf("feed: invalid Atom: %w", err)
+			}
+			return strings.TrimSpace(doc.Title), nil
+		default:
+			return "", fmt.Errorf("feed: unsupported XML root element %q", root.XMLName.Local)
+		}
+	default:
+		return "", errors.New("feed: unrecognized content, expected XML or JSON")
+	}
+}
+
 func parseXMLFeed(data []byte) ([]source.Item, error) {
 	var root struct {
 		XMLName xml.Name
@@ -241,6 +303,7 @@ type rssDoc struct {
 }
 
 type rssChannel struct {
+	Title string    `xml:"title"`
 	Items []rssItem `xml:"item"`
 }
 
@@ -304,6 +367,7 @@ func parseRSS(data []byte) ([]source.Item, error) {
 // ---- Atom ----
 
 type atomDoc struct {
+	Title   string      `xml:"title"`
 	Entries []atomEntry `xml:"entry"`
 }
 
@@ -381,6 +445,7 @@ func pickAtomLink(links []atomLink) string {
 // ---- JSON Feed ----
 
 type jsonFeedDoc struct {
+	Title string         `json:"title"`
 	Items []jsonFeedItem `json:"items"`
 }
 

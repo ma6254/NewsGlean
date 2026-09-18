@@ -202,6 +202,44 @@ func (s *Server) handleSourceDelete(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
+// SourceProbeRequest 是探测渠道元信息的请求体（保存前「自动获取」显示名等）。
+type SourceProbeRequest struct {
+	Type   string          `json:"type"`   // 渠道类型标识
+	Config json.RawMessage `json:"config"` // 渠道配置 JSON 对象
+}
+
+// handleSourceProbe 处理 POST /api/source/probe。
+//
+// @Summary      探测渠道元信息
+// @Description  在保存前探测渠道元信息（如 feed 标题），供「自动获取显示名」使用
+// @Tags         source
+// @Accept       json
+// @Produce      json
+// @Param        req  body      SourceProbeRequest  true  "渠道类型与配置"
+// @Success      200  {object}  source.ProbeInfo
+// @Failure      400  {object}  ErrorResponse
+// @Router       /source/probe [post]
+func (s *Server) handleSourceProbe(w http.ResponseWriter, r *http.Request) {
+	var req SourceProbeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
+		return
+	}
+	if req.Type == "" {
+		writeError(w, http.StatusBadRequest, "type is required")
+		return
+	}
+	if len(req.Config) == 0 {
+		req.Config = json.RawMessage("{}")
+	}
+	info, err := s.app.ProbeSource(r.Context(), req.Type, string(req.Config))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, info)
+}
+
 // handleRefresh 处理 POST /api/refresh（手动触发一轮采集）。
 //
 // @Summary      手动触发一轮采集
