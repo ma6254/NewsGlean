@@ -8,8 +8,8 @@ import (
 
 // memSink 内存 Sink，用于测试记录捕获。
 type memSink struct {
-	mu     sync.Mutex
-	recs   []Record
+	mu      sync.Mutex
+	recs    []Record
 	openErr error
 }
 

@@ -36,7 +36,7 @@ func (s *Server) mountWeb(mux *http.ServeMux) {
 		}
 		mux.Handle("/", httputil.NewSingleHostReverseProxy(target))
 	case "dir":
-		mux.Handle("/", http.FileServer(http.Dir(s.cfg.Web.Dir)))
+		mux.Handle("/", spaFileServer(http.Dir(s.cfg.Web.Dir)))
 	case "gz":
 		dir, err := extractTarGz(s.cfg.Web.Archive)
 		if err != nil {
@@ -45,7 +45,7 @@ func (s *Server) mountWeb(mux *http.ServeMux) {
 			}))
 			return
 		}
-		mux.Handle("/", http.FileServer(http.Dir(dir)))
+		mux.Handle("/", spaFileServer(http.Dir(dir)))
 	case "embed", "":
 		dist, err := webui.Dist()
 		if err != nil {
@@ -54,7 +54,7 @@ func (s *Server) mountWeb(mux *http.ServeMux) {
 			}))
 			return
 		}
-		mux.Handle("/", http.FileServer(http.FS(dist)))
+		mux.Handle("/", spaFileServer(http.FS(dist)))
 	default:
 		mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			http.Error(w, fmt.Sprintf("unknown web mode %q", s.cfg.Web.Mode), http.StatusInternalServerError)
@@ -119,4 +119,28 @@ func extractTarGz(path string) (string, error) {
 		}
 	}
 	return dir, nil
+}
+
+// spaFileServer 包装静态文件服务，支持前端 history 路由（BrowserRouter）：
+// 请求命中真实文件时正常返回；未命中且路径不含扩展名时回退到 index.html（SPA 入口）。
+// 含扩展名的缺失文件（如 /assets/x.js）仍返回 404，避免把 HTML 当静态资源返回。
+func spaFileServer(fsys http.FileSystem) http.Handler {
+	fileServer := http.FileServer(fsys)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upath := strings.TrimPrefix(r.URL.Path, "/")
+		if upath == "" {
+			upath = "index.html"
+		}
+		if f, err := fsys.Open(upath); err == nil {
+			f.Close()
+			fileServer.ServeHTTP(w, r)
+			return
+		}
+		if strings.Contains(upath, ".") {
+			http.NotFound(w, r)
+			return
+		}
+		r.URL.Path = "/"
+		fileServer.ServeHTTP(w, r)
+	})
 }

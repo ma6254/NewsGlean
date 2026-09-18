@@ -22,17 +22,18 @@ var (
 
 // Source 渠道实例表（sources）。
 type Source struct {
-	ID        uint64 `gorm:"column:id;unique;primaryKey;autoIncrement"` // 渠道实例ID
-	Name      string `gorm:"column:name"`                               // 显示名
-	Type      string `gorm:"column:type"`                               // 渠道类型标识
-	Config    string `gorm:"column:config;type:text"`                   // 渠道配置 JSON，核心层不解析
-	Interval  int    `gorm:"column:interval"`                           // 刷新间隔（秒）
-	Enabled   bool   `gorm:"column:enabled"`                            // 是否启用
-	FailCount int    `gorm:"column:fail_count"`                         // 连续失败次数
-	LastError string `gorm:"column:last_error;type:text"`               // 最近一次错误
-	CreatedAt string `gorm:"column:created_at"`                         // 创建时间
-	UpdatedAt string `gorm:"column:updated_at"`                         // 更新时间
-	Deleted   bool   `gorm:"column:deleted"`                            // 删除标记，软删除
+	ID          uint64 `gorm:"column:id;unique;primaryKey;autoIncrement"` // 渠道实例ID
+	Name        string `gorm:"column:name"`                               // 显示名
+	Type        string `gorm:"column:type"`                               // 渠道类型标识
+	Config      string `gorm:"column:config;type:text"`                   // 渠道配置 JSON，核心层不解析
+	Interval    int    `gorm:"column:interval"`                           // 刷新间隔（秒）
+	Enabled     bool   `gorm:"column:enabled"`                            // 是否启用
+	FailCount   int    `gorm:"column:fail_count"`                         // 连续失败次数
+	LastError   string `gorm:"column:last_error;type:text"`               // 最近一次错误
+	CreatedAt   string `gorm:"column:created_at"`                         // 创建时间
+	UpdatedAt   string `gorm:"column:updated_at"`                         // 更新时间
+	Deleted     bool   `gorm:"column:deleted"`                            // 删除标记，软删除
+	LastEntryAt string `gorm:"-"`                                         // 非持久化：该渠道最新条目的发布时间，由聚合查询填充
 }
 
 // TableName 指定表名。

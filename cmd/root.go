@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/ma6254/news-glean/internal/database"
 	"github.com/ma6254/news-glean/internal/scheduler"
 	"github.com/ma6254/news-glean/internal/server"
+	"github.com/ma6254/news-glean/log"
 
 	// 注册渠道实现（导入即触发 init 注册到 source 注册表）
 	_ "github.com/ma6254/news-glean/internal/source/feed"
@@ -73,6 +75,17 @@ func runServe(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
+	// 装配日志库：把应用日志配置映射到 log 库并应用到默认核心，
+	// 之后的 fmt 输出与 log.Info 都会进入同一套终端/文件输出端。
+	cleanupLog, err := setupLog(cfg.Log)
+	if err != nil {
+		return fmt.Errorf("setup log: %w", err)
+	}
+	defer cleanupLog()
+
+	// 启动 banner：原始输出，不带时间/级别前缀，只进终端。
+	log.Banner(banner())
+
 	driver := cfg.Database.Driver
 	if driver == "" {
 		driver = "sqlite"
@@ -91,6 +104,11 @@ func runServe(cmd *cobra.Command, _ []string) error {
 	}
 
 	a := app.New(cfg, db)
+	if n, err := a.SeedDefaults(); err != nil {
+		return fmt.Errorf("seed default sources: %w", err)
+	} else if n > 0 {
+		log.Info("seeded default sources", "count", n)
+	}
 	sched := scheduler.New(a)
 	srv := server.New(cfg, db, a, sched)
 
@@ -102,17 +120,40 @@ func runServe(cmd *cobra.Command, _ []string) error {
 		errCh <- srv.Run()
 	}()
 
-	fmt.Printf("news-glean serving on http://%s\n", cfg.Server.HTTPAddr)
-	fmt.Printf("swagger UI: http://%s/swagger/index.html\n", cfg.Server.HTTPAddr)
+	log.Info("news-glean serving", "addr", "http://"+cfg.Server.HTTPAddr)
+	log.Info("swagger UI available", "url", "http://"+cfg.Server.HTTPAddr+"/swagger/index.html")
 
 	select {
 	case err := <-errCh:
 		return err
 	case <-ctx.Done():
+		log.Info("shutting down")
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		return srv.Stop(shutdownCtx)
 	}
+}
+
+// setupLog 把应用日志配置映射到 log 库并应用到默认核心，返回关闭函数。
+// 目录非空时按 access/error 双文件落盘（日志库自管大小轮转）；
+// max_size/max_backups 映射到日志库的 MB 轮转参数；max_age 暂未接入（保留字段）。
+func setupLog(lc config.LogConfig) (func(), error) {
+	logCfg := log.DefaultConfig()
+	logCfg.LogLevel = lc.Level
+	if lc.MaxSize > 0 {
+		logCfg.MaxSizeMB = lc.MaxSize
+	}
+	if lc.MaxBackups > 0 {
+		logCfg.MaxBackups = lc.MaxBackups
+	}
+	if lc.Dir != "" {
+		logCfg.Access = filepath.Join(lc.Dir, "access.log")
+		logCfg.Error = filepath.Join(lc.Dir, "error.log")
+	}
+	if err := logCfg.Apply(log.DefaultCore()); err != nil {
+		return nil, err
+	}
+	return func() { log.DefaultCore().Close() }, nil
 }
 
 // Execute 是程序入口，由 main 调用。

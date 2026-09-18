@@ -32,6 +32,9 @@ func (l *Logger) With(fields ...Field) *Logger {
 	return &Logger{core: l.core, tags: l.tags, fields: nf}
 }
 
+// Banner 输出原始文本（不做格式化），用于 ASCII 艺术字等，只写到终端。
+func (l *Logger) Banner(s string) { l.core.Banner(s) }
+
 // Debug 记录调试信息（access 通道）。
 func (l *Logger) Debug(msg string, args ...any) { l.log(LevelDebug, msg, args...) }
 
@@ -56,12 +59,14 @@ func (l *Logger) log(level Level, msg string, args ...any) {
 		Message: msg,
 		Fields:  parseFields(l.fields, args...),
 	}
+	rec.File, rec.Line = caller()
 	l.core.Log(rec)
 }
 
 // parseFields 把参数解析为字段。支持两种写法：
 //   - slog 风格键值对：Info("msg", "key", value)
 //   - 直接传 Field：   Info("msg", Str("key", "value"))
+//
 // 奇数个键值对参数时，最后缺失值的键按 slog 惯例标记为 !BADKEY 并作为值输出。
 func parseFields(base []Field, args ...any) []Field {
 	if len(args) == 0 {
@@ -101,13 +106,18 @@ func Default() *Logger { return std }
 func DefaultCore() *Core { return std.core }
 
 // 包级便捷函数，等价于 Default().Xxx(...)。
-func Debug(msg string, args ...any) { std.Debug(msg, args...) }
-func Info(msg string, args ...any)  { std.Info(msg, args...) }
-func Warn(msg string, args ...any)  { std.Warn(msg, args...) }
-func Error(msg string, args ...any) { std.Error(msg, args...) }
+// 注意：直接调用 std.log 而非 std.Xxx，保持与派生 Logger 相同的调用深度，
+// 这样 caller() 的固定跳帧能同时覆盖包级函数与派生 Logger 两条路径。
+func Debug(msg string, args ...any) { std.log(LevelDebug, msg, args...) }
+func Info(msg string, args ...any)  { std.log(LevelInfo, msg, args...) }
+func Warn(msg string, args ...any)  { std.log(LevelWarn, msg, args...) }
+func Error(msg string, args ...any) { std.log(LevelError, msg, args...) }
 
 // WithTag 包级便捷函数：从默认 Logger 派生带 tag 的 Logger。
 func WithTag(tag string) *Logger { return std.WithTag(tag) }
 
 // With 包级便捷函数：从默认 Logger 派生带固定字段的 Logger。
 func With(fields ...Field) *Logger { return std.With(fields...) }
+
+// Banner 包级便捷函数：向默认核心输出原始文本（ASCII 艺术字等）。
+func Banner(s string) { std.Banner(s) }

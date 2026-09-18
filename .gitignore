@@ -24,6 +24,8 @@ vendor/
 go.work
 go.work.sum
 .gocache/
+.gomodcache/
+.gopath/
 
 # env file
 .env

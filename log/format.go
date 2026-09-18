@@ -20,6 +20,10 @@ func FormatTextLine(rec Record, timeLayout string) string {
 		sb.WriteByte(' ')
 		sb.WriteString(rec.Tags.Bracket())
 	}
+	if c := rec.Caller(); c != "" {
+		sb.WriteByte(' ')
+		sb.WriteString(c)
+	}
 	sb.WriteByte(' ')
 	sb.WriteString(rec.Message)
 	for _, f := range rec.Fields {
@@ -69,6 +73,7 @@ type jsonRecord struct {
 	Level   string         `json:"level"`
 	Channel string         `json:"channel"`
 	Tags    []string       `json:"tags,omitempty"`
+	Caller  string         `json:"caller,omitempty"`
 	Message string         `json:"msg"`
 	Fields  map[string]any `json:"fields,omitempty"`
 }
@@ -84,6 +89,7 @@ func FormatJSONLine(rec Record) []byte {
 	if len(rec.Tags) > 0 {
 		jr.Tags = rec.Tags.Clone()
 	}
+	jr.Caller = rec.Caller()
 	if len(rec.Fields) > 0 {
 		jr.Fields = make(map[string]any, len(rec.Fields))
 		for _, f := range rec.Fields {

@@ -1,6 +1,9 @@
 package log
 
-import "time"
+import (
+	"strconv"
+	"time"
+)
 
 // Channel 日志通道：access（业务流水）或 error（错误诊断）。
 type Channel int
@@ -34,6 +37,16 @@ type Record struct {
 	Tags    Tags
 	Message string
 	Fields  []Field
+	File    string // 调用点文件（相对模块根的斜杠路径，如 internal/app/app.go）
+	Line    int    // 调用点行号
+}
+
+// Caller 返回 "file:line" 形式的调用点描述；未捕获到时返回空串。
+func (r Record) Caller() string {
+	if r.File == "" {
+		return ""
+	}
+	return r.File + ":" + strconv.Itoa(r.Line)
 }
 
 // Channel 按级别路由通道：Debug/Info/Warn → access，Error → error。
@@ -45,8 +58,8 @@ func (r Record) Channel() Channel {
 }
 
 // Field 便捷构造函数。
-func Str(key, value string) Field { return Field{key, value} }
-func Int(key string, value int) Field { return Field{key, value} }
+func Str(key, value string) Field       { return Field{key, value} }
+func Int(key string, value int) Field   { return Field{key, value} }
 func Bool(key string, value bool) Field { return Field{key, value} }
-func Err(err error) Field { return Field{"error", err} }
-func Any(key string, value any) Field { return Field{key, value} }
+func Err(err error) Field               { return Field{"error", err} }
+func Any(key string, value any) Field   { return Field{key, value} }

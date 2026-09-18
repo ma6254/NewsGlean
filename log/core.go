@@ -2,6 +2,7 @@ package log
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -25,16 +26,38 @@ type Core struct {
 	access      []Sink
 	errSinks    []Sink
 	onError     func(err error)
+	raw         io.Writer // 原始输出（ASCII banner 等），默认 stderr，不经过任何格式化
 }
 
 // NewCore 创建日志核心。默认级别 info；sink 内部错误默认打 stderr 一行。
 func NewCore() *Core {
 	return &Core{
 		level: LevelInfo,
+		raw:   os.Stderr,
 		onError: func(err error) {
 			fmt.Fprintf(os.Stderr, "log: %v\n", err)
 		},
 	}
+}
+
+// SetRawWriter 设置原始输出 writer（如启动 banner），默认 stderr。
+// 由 Config.Apply 在挂载终端输出端时同步指向同一个 writer。
+func (c *Core) SetRawWriter(w io.Writer) {
+	c.mu.Lock()
+	c.raw = w
+	c.mu.Unlock()
+}
+
+// Banner 输出原始多行文本，不做时间/级别/JSON 格式化，用于启动时的 ASCII 艺术字。
+// 只写到 raw writer（终端），不进文件/WebSocket，避免污染结构化日志。
+func (c *Core) Banner(s string) {
+	c.mu.RLock()
+	w := c.raw
+	c.mu.RUnlock()
+	if w == nil {
+		return
+	}
+	_, _ = io.WriteString(w, s)
 }
 
 // SetLevel 设置全局级别。

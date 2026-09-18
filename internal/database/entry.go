@@ -101,3 +101,37 @@ func (d *DB) EntryExistsByHash(hash string) (bool, error) {
 		Count(&count).Error
 	return count > 0, err
 }
+
+// LatestPublishTime 返回指定渠道最新一条未删除条目的发布时间（RFC3339 字符串）。
+// 无条目时返回空字符串。published_at 统一为 UTC RFC3339，字符串字典序即时间序。
+func (d *DB) LatestPublishTime(sourceID uint64) (string, error) {
+	var latest string
+	err := d.Model(&Entry{}).
+		Select("COALESCE(MAX(published_at), '')").
+		Where("source_id = ? AND deleted = ?", sourceID, false).
+		Scan(&latest).Error
+	return latest, err
+}
+
+// LatestPublishTimes 返回所有渠道的最新条目发布时间，key 为渠道实例 ID。
+// 没有任何未删除条目的渠道不会出现在结果中。
+func (d *DB) LatestPublishTimes() (map[uint64]string, error) {
+	type row struct {
+		SourceID uint64 `gorm:"column:source_id"`
+		Latest   string `gorm:"column:latest"`
+	}
+	var rows []row
+	err := d.Model(&Entry{}).
+		Select("source_id, MAX(published_at) AS latest").
+		Where("deleted = ?", false).
+		Group("source_id").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	m := make(map[uint64]string, len(rows))
+	for _, r := range rows {
+		m[r.SourceID] = r.Latest
+	}
+	return m, nil
+}

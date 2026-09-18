@@ -11,16 +11,17 @@ import (
 
 // SourceDTO 是渠道实例的对外表示（config 展开为 JSON 对象）。
 type SourceDTO struct {
-	ID        uint64          `json:"id"`         // 渠道实例ID
-	Name      string          `json:"name"`       // 显示名
-	Type      string          `json:"type"`       // 渠道类型标识
-	Config    json.RawMessage `json:"config"`     // 渠道配置 JSON 对象
-	Interval  int             `json:"interval"`   // 刷新间隔（秒）
-	Enabled   bool            `json:"enabled"`    // 是否启用
-	FailCount int             `json:"fail_count"` // 连续失败次数
-	LastError string          `json:"last_error"` // 最近一次错误
-	CreatedAt string          `json:"created_at"` // 创建时间
-	UpdatedAt string          `json:"updated_at"` // 更新时间
+	ID          uint64          `json:"id"`            // 渠道实例ID
+	Name        string          `json:"name"`          // 显示名
+	Type        string          `json:"type"`          // 渠道类型标识
+	Config      json.RawMessage `json:"config"`        // 渠道配置 JSON 对象
+	Interval    int             `json:"interval"`      // 刷新间隔（秒）
+	Enabled     bool            `json:"enabled"`       // 是否启用
+	FailCount   int             `json:"fail_count"`    // 连续失败次数
+	LastError   string          `json:"last_error"`    // 最近一次错误
+	LastEntryAt string          `json:"last_entry_at"` // 最新条目的发布时间
+	CreatedAt   string          `json:"created_at"`    // 创建时间
+	UpdatedAt   string          `json:"updated_at"`    // 更新时间
 }
 
 // SourceListResponse 是渠道列表的响应体。
@@ -44,16 +45,17 @@ func toSourceDTO(s *database.Source) SourceDTO {
 		cfg = json.RawMessage("{}")
 	}
 	return SourceDTO{
-		ID:        s.ID,
-		Name:      s.Name,
-		Type:      s.Type,
-		Config:    cfg,
-		Interval:  s.Interval,
-		Enabled:   s.Enabled,
-		FailCount: s.FailCount,
-		LastError: s.LastError,
-		CreatedAt: s.CreatedAt,
-		UpdatedAt: s.UpdatedAt,
+		ID:          s.ID,
+		Name:        s.Name,
+		Type:        s.Type,
+		Config:      cfg,
+		Interval:    s.Interval,
+		Enabled:     s.Enabled,
+		FailCount:   s.FailCount,
+		LastError:   s.LastError,
+		LastEntryAt: s.LastEntryAt,
+		CreatedAt:   s.CreatedAt,
+		UpdatedAt:   s.UpdatedAt,
 	}
 }
 
@@ -94,6 +96,14 @@ func (s *Server) handleSourceList(w http.ResponseWriter, _ *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	latest, err := s.db.LatestPublishTimes()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	for i := range list {
+		list[i].LastEntryAt = latest[list[i].ID]
+	}
 	dtos := make([]SourceDTO, 0, len(list))
 	for i := range list {
 		dtos = append(dtos, toSourceDTO(&list[i]))
@@ -115,6 +125,12 @@ func (s *Server) handleSourceGet(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	latest, err := s.db.LatestPublishTime(src.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	src.LastEntryAt = latest
 	writeJSON(w, http.StatusOK, toSourceDTO(src))
 }
 

@@ -31,8 +31,8 @@ func New(cfg *config.Config, db *database.DB, a *app.App, sched *scheduler.Sched
 	return srv
 }
 
-// Handler 返回路由处理器（供测试与 Run 使用）。
-func (s *Server) Handler() http.Handler { return s.mux }
+// Handler 返回带请求日志中间件的路由处理器（供测试与 Run 使用）。
+func (s *Server) Handler() http.Handler { return loggingMiddleware(s.mux) }
 
 // Run 监听并服务 HTTP 请求，阻塞直到进程退出。
 func (s *Server) Run() error {
@@ -44,7 +44,7 @@ func (s *Server) Run() error {
 	if err != nil {
 		return err
 	}
-	s.http = &http.Server{Addr: addr, Handler: s.mux}
+	s.http = &http.Server{Addr: addr, Handler: s.Handler()}
 	return s.http.Serve(ln)
 }
 

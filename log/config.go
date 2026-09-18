@@ -50,14 +50,14 @@ type Config struct {
 // 级别 info、彩色 auto、文本格式、关键词着色开、轮转 10MB×5、不落盘（只打 stderr）、无 WS。
 func DefaultConfig() *Config {
 	return &Config{
-		LogLevel:   "info",
+		LogLevel:    "info",
 		AccessLevel: "",
-		Color:      "auto",
-		WS:         "",
-		Format:     "text",
-		Highlight:  true,
-		MaxSizeMB:  10,
-		MaxBackups: 5,
+		Color:       "auto",
+		WS:          "",
+		Format:      "text",
+		Highlight:   true,
+		MaxSizeMB:   10,
+		MaxBackups:  5,
 	}
 }
 
@@ -138,6 +138,7 @@ func (c *Config) Apply(core *Core) error {
 	if w == nil {
 		w = os.Stderr
 	}
+	core.SetRawWriter(w)
 	console := NewConsoleSink(w, color, c.Format)
 	console.SetHighlight(c.Highlight)
 	core.AddSink(ChannelAccess, console)

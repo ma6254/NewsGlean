@@ -176,6 +176,12 @@ func (c *ConsoleSink) formatText(rec Record) string {
 		sb.WriteString(rec.Tags.Bracket())
 		sb.WriteString(ansiReset)
 	}
+	if c := rec.Caller(); c != "" {
+		sb.WriteByte(' ')
+		sb.WriteString(ansiDim)
+		sb.WriteString(c)
+		sb.WriteString(ansiReset)
+	}
 	sb.WriteByte(' ')
 	if rec.Level >= LevelError {
 		sb.WriteString(ansiError)

@@ -108,6 +108,9 @@ definitions:
       interval:
         description: 刷新间隔（秒）
         type: integer
+      last_entry_at:
+        description: 最新条目的发布时间
+        type: string
       last_error:
         description: 最近一次错误
         type: string

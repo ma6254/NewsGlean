@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"strconv"
 	"time"
 
@@ -14,9 +13,13 @@ import (
 	"github.com/ma6254/news-glean/internal/database"
 	"github.com/ma6254/news-glean/internal/filter"
 	"github.com/ma6254/news-glean/internal/source"
+	"github.com/ma6254/news-glean/log"
 )
 
 const defaultFetchLimit = 200 // 单轮单渠道拉取条数上限
+
+// logger 是应用服务层的日志器，带 app tag。
+var logger = log.WithTag("app")
 
 // App 是应用服务层。
 type App struct {
@@ -57,6 +60,7 @@ func (a *App) AddSource(name, typ, cfgJSON string, interval int, enabled bool) (
 	if err := a.db.CreateSource(s); err != nil {
 		return nil, err
 	}
+	logger.Info("source created", "id", s.ID, "name", name, "type", typ)
 	return s, nil
 }
 
@@ -77,8 +81,10 @@ func (a *App) RefreshAll(ctx context.Context) (*RefreshResult, error) {
 		result.Skipped += skip
 		if err != nil {
 			result.Errors = append(result.Errors, fmt.Sprintf("source %d (%s): %v", sources[i].ID, sources[i].Name, err))
+			logger.Error("refresh source failed", "id", sources[i].ID, "name", sources[i].Name, "error", err)
 		}
 	}
+	logger.Info("refresh finished", "sources", result.Sources, "inserted", result.Inserted, "skipped", result.Skipped, "errors", len(result.Errors))
 	return result, nil
 }
 
@@ -94,7 +100,9 @@ func (a *App) RefreshSource(ctx context.Context, id uint64) (*RefreshResult, err
 	result.Skipped = skip
 	if err != nil {
 		result.Errors = append(result.Errors, fmt.Sprintf("source %d (%s): %v", s.ID, s.Name, err))
+		logger.Error("refresh source failed", "id", s.ID, "name", s.Name, "error", err)
 	}
+	logger.Info("refresh source finished", "id", s.ID, "name", s.Name, "inserted", ins, "skipped", skip)
 	return result, nil
 }
 
@@ -173,7 +181,7 @@ func (a *App) ingestItem(sourceID uint64, item source.Item) (bool, error) {
 
 	// 三者都缺：无任何身份可去重，丢弃并告警
 	if guid == "" && normURL == "" && hash == "" {
-		log.Printf("app: dropping item with no identity (title=%q)", item.Title)
+		logger.Warn("dropping item with no identity", "title", item.Title)
 		return false, nil
 	}
 

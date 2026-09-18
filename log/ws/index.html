@@ -23,6 +23,7 @@
   .WARN  { color:#d29922; }
   .ERROR { color:#f85149; font-weight:700; }
   .tag { color:#39c5cf; }
+  .caller { color:#5c6476; }
   .chan-error { background:rgba(248,81,73,.06); }
   .fields { color:#5c6476; }
 </style>
@@ -67,6 +68,10 @@ function append(rec) {
   if (rec.tags && rec.tags.length) {
     const tg = document.createElement('span'); tg.className = 'tag'; tg.textContent = rec.tags.map(t => '[' + t + ']').join('') + ' ';
     row.appendChild(tg);
+  }
+  if (rec.caller) {
+    const cl = document.createElement('span'); cl.className = 'caller'; cl.textContent = rec.caller + ' ';
+    row.appendChild(cl);
   }
   const msg = document.createElement('span'); msg.textContent = rec.msg;
   row.appendChild(msg);
