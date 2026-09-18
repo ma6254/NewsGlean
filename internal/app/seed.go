@@ -20,6 +20,7 @@ var defaultSources = []defaultSource{
 	{Name: "阮一峰的网络日志", URL: "https://feeds.feedburner.com/ruanyifeng", Interval: 3600},
 	{Name: "少数派", URL: "https://sspai.com/feed", Interval: 3600},
 	{Name: "Hacker News", URL: "https://news.ycombinator.com/rss", Interval: 1800},
+	{Name: "动漫花园", URL: "https://share.dmhy.org/topics/rss/rss.xml", Interval: 3600},
 }
 
 // SeedDefaults 在数据库尚无任何渠道时写入内置默认渠道，返回本次写入的数量。
