@@ -7,8 +7,7 @@ import (
 )
 
 // EntryState 条目阅读状态表（entry_state），与 entries 一对一。
-// 按数据模型承载已读、收藏、归档、稍后再阅四类状态；当前仅「稍后再阅」接线，
-// 其余字段先落表，后续里程碑逐个启用。
+// 承载已读、收藏、归档、稍后再阅四类状态；阶段 4 起全部接线。
 type EntryState struct {
 	EntryID   uint64 `gorm:"column:entry_id;unique;primaryKey"` // 条目ID
 	Read      bool   `gorm:"column:read"`                       // 已读
@@ -72,6 +71,72 @@ func (d *DB) SetReadLater(entryID uint64, readLater bool) (EntryState, error) {
 	}
 	st = EntryState{EntryID: entryID, ReadLater: true, UpdatedAt: nowString()}
 	return st, d.Create(&st).Error
+}
+
+// setStateFlag 是设置布尔阅读状态（已读 / 收藏 / 归档）的通用实现：
+// 设置/取消某状态并刷新 entry_state.updated_at。无状态行且要取消时不做任何写入。
+// 返回更新后的状态。column 必须是 EntryState 上的布尔列名（read/favorite/archive）。
+func (d *DB) setStateFlag(entryID uint64, column string, value bool) (EntryState, error) {
+	var st EntryState
+	err := d.Where("entry_id = ?", entryID).First(&st).Error
+	if err == nil {
+		if stateFlag(&st, column) == value {
+			return st, nil
+		}
+		setStateFlagValue(&st, column, value)
+		st.UpdatedAt = nowString()
+		return st, d.Model(&EntryState{}).Where("entry_id = ?", entryID).
+			Updates(map[string]any{column: value, "updated_at": st.UpdatedAt}).Error
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return EntryState{}, err
+	}
+	if !value {
+		return EntryState{}, nil
+	}
+	st = EntryState{EntryID: entryID, UpdatedAt: nowString()}
+	setStateFlagValue(&st, column, true)
+	return st, d.Create(&st).Error
+}
+
+// SetRead 设置/取消条目的「已读」状态。
+func (d *DB) SetRead(entryID uint64, read bool) (EntryState, error) {
+	return d.setStateFlag(entryID, "read", read)
+}
+
+// SetFavorite 设置/取消条目的「收藏」状态。
+func (d *DB) SetFavorite(entryID uint64, favorite bool) (EntryState, error) {
+	return d.setStateFlag(entryID, "favorite", favorite)
+}
+
+// SetArchive 设置/取消条目的「归档」状态。
+func (d *DB) SetArchive(entryID uint64, archive bool) (EntryState, error) {
+	return d.setStateFlag(entryID, "archive", archive)
+}
+
+// stateFlag 读取 EntryState 上指定布尔列的值。
+func stateFlag(st *EntryState, column string) bool {
+	switch column {
+	case "read":
+		return st.Read
+	case "favorite":
+		return st.Favorite
+	case "archive":
+		return st.Archive
+	}
+	return false
+}
+
+// setStateFlagValue 写入 EntryState 上指定布尔列的值。
+func setStateFlagValue(st *EntryState, column string, value bool) {
+	switch column {
+	case "read":
+		st.Read = value
+	case "favorite":
+		st.Favorite = value
+	case "archive":
+		st.Archive = value
+	}
 }
 
 // ListReadLater 分页返回标记为「稍后再阅」的未删除条目，

@@ -107,7 +107,7 @@ func TestSchedulerAutoRefresh(t *testing.T) {
 	var total int64
 	var err error
 	for time.Now().Before(deadline) {
-		_, total, err = db.ListEntries(1, 200, 0)
+		_, total, err = db.ListEntries(1, 200, database.EntryFilter{})
 		if err != nil {
 			t.Fatalf("ListEntries: %v", err)
 		}

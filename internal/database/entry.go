@@ -52,25 +52,54 @@ func (d *DB) GetEntry(id uint64) (*Entry, error) {
 	return &e, nil
 }
 
+// EntryFilter 是条目列表的过滤条件；指针字段为 nil 表示该维度不过滤。
+type EntryFilter struct {
+	SourceID uint64 // 按渠道过滤，0 表示不过滤
+	Read     *bool  // 按已读状态过滤
+	Favorite *bool  // 按收藏状态过滤
+	Archive  *bool  // 按归档状态过滤
+}
+
+// boolInt 把 bool 转成 sqlite 布尔列对应的 0/1。
+func boolInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
 // ListEntries 分页返回未删除的条目，按发布时间倒序、ID 倒序。
-// sourceID 为 0 表示不过滤渠道。返回条目列表与总数。
-func (d *DB) ListEntries(page, pageSize int, sourceID uint64) ([]Entry, int64, error) {
+// 状态过滤会 LEFT JOIN entry_state：无状态行的条目按「全部 false」处理。
+// 返回条目列表与总数。
+func (d *DB) ListEntries(page, pageSize int, f EntryFilter) ([]Entry, int64, error) {
 	if page < 1 {
 		page = 1
 	}
 	if pageSize < 1 || pageSize > 200 {
 		pageSize = 50
 	}
-	q := d.Model(&Entry{}).Where("deleted = ?", false)
-	if sourceID != 0 {
-		q = q.Where("source_id = ?", sourceID)
+	q := d.Model(&Entry{}).Where("entries.deleted = ?", false)
+	if f.SourceID != 0 {
+		q = q.Where("entries.source_id = ?", f.SourceID)
+	}
+	if f.Read != nil || f.Favorite != nil || f.Archive != nil {
+		q = q.Joins("LEFT JOIN entry_state ON entry_state.entry_id = entries.id")
+		if f.Read != nil {
+			q = q.Where("COALESCE(entry_state.read, 0) = ?", boolInt(*f.Read))
+		}
+		if f.Favorite != nil {
+			q = q.Where("COALESCE(entry_state.favorite, 0) = ?", boolInt(*f.Favorite))
+		}
+		if f.Archive != nil {
+			q = q.Where("COALESCE(entry_state.archive, 0) = ?", boolInt(*f.Archive))
+		}
 	}
 	var total int64
 	if err := q.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 	var list []Entry
-	err := q.Order("published_at DESC, id DESC").
+	err := q.Order("entries.published_at DESC, entries.id DESC").
 		Offset((page - 1) * pageSize).Limit(pageSize).Find(&list).Error
 	return list, total, err
 }

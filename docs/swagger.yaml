@@ -53,6 +53,9 @@ definitions:
     type: object
   server.EntryDTO:
     properties:
+      archive:
+        description: 是否已归档
+        type: boolean
       author:
         description: 作者
         type: string
@@ -67,6 +70,9 @@ definitions:
           type: string
         description: 渠道特有字段
         type: object
+      favorite:
+        description: 是否已收藏
+        type: boolean
       fetched_at:
         description: 抓取时间（RFC3339）
         type: string
@@ -79,6 +85,9 @@ definitions:
       published_at:
         description: 发布时间（RFC3339）
         type: string
+      read:
+        description: 是否已读
+        type: boolean
       read_later:
         description: 是否已加入「稍后再阅」
         type: boolean
@@ -296,6 +305,108 @@ paths:
       summary: 获取单个条目
       tags:
       - entry
+  /entry/{id}/archive:
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: 条目ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: '{\'
+        in: body
+        name: req
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.EntryDTO'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: 设置/取消归档
+      tags:
+      - entry
+  /entry/{id}/favorite:
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: 条目ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: '{\'
+        in: body
+        name: req
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.EntryDTO'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: 设置/取消收藏
+      tags:
+      - entry
+  /entry/{id}/read:
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: 条目ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: '{\'
+        in: body
+        name: req
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.EntryDTO'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: 设置/取消已读
+      tags:
+      - entry
   /entry/{id}/read-later:
     put:
       consumes:
@@ -333,7 +444,7 @@ paths:
       - entry
   /entry/list:
     get:
-      description: 分页列出条目，可按渠道过滤
+      description: 分页列出条目，可按渠道、已读/收藏/归档状态过滤
       parameters:
       - description: 页码（从1开始）
         in: query
@@ -347,6 +458,18 @@ paths:
         in: query
         name: source_id
         type: integer
+      - description: 按已读状态过滤
+        in: query
+        name: read
+        type: boolean
+      - description: 按收藏状态过滤
+        in: query
+        name: favorite
+        type: boolean
+      - description: 按归档状态过滤
+        in: query
+        name: archive
+        type: boolean
       produces:
       - application/json
       responses:

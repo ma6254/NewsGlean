@@ -32,6 +32,9 @@ func (s *Server) routes() *http.ServeMux {
 	mux.HandleFunc("GET /api/entry/list", s.handleEntryList)
 	mux.HandleFunc("GET /api/entry/read-later", s.handleReadLaterList)
 	mux.HandleFunc("GET /api/entry/{id}", s.handleEntryGet)
+	mux.HandleFunc("PUT /api/entry/{id}/read", s.handleEntrySetRead)
+	mux.HandleFunc("PUT /api/entry/{id}/favorite", s.handleEntrySetFavorite)
+	mux.HandleFunc("PUT /api/entry/{id}/archive", s.handleEntrySetArchive)
 	mux.HandleFunc("PUT /api/entry/{id}/read-later", s.handleEntrySetReadLater)
 
 	// Swagger UI

@@ -85,6 +85,90 @@ func TestEntryStateReadLater(t *testing.T) {
 	}
 }
 
+func TestEntryStateFlags(t *testing.T) {
+	db := newTestDB(t)
+
+	ids := make([]uint64, 0, 3)
+	for _, title := range []string{"a", "b", "c"} {
+		e := &Entry{SourceID: 1, Title: title, URL: "https://example.com/" + title}
+		if err := db.CreateEntry(e); err != nil {
+			t.Fatalf("CreateEntry: %v", err)
+		}
+		ids = append(ids, e.ID)
+	}
+
+	// 0 号：已读；1 号：收藏；2 号：归档
+	if _, err := db.SetRead(ids[0], true); err != nil {
+		t.Fatalf("SetRead: %v", err)
+	}
+	if _, err := db.SetFavorite(ids[1], true); err != nil {
+		t.Fatalf("SetFavorite: %v", err)
+	}
+	if _, err := db.SetArchive(ids[2], true); err != nil {
+		t.Fatalf("SetArchive: %v", err)
+	}
+
+	states, err := db.GetEntryStates(ids)
+	if err != nil {
+		t.Fatalf("GetEntryStates: %v", err)
+	}
+	if !states[ids[0]].Read || states[ids[0]].Favorite || states[ids[0]].Archive {
+		t.Fatalf("entry 0 state wrong: %+v", states[ids[0]])
+	}
+	if states[ids[1]].Read || !states[ids[1]].Favorite {
+		t.Fatalf("entry 1 state wrong: %+v", states[ids[1]])
+	}
+	if states[ids[2]].Read || !states[ids[2]].Archive {
+		t.Fatalf("entry 2 state wrong: %+v", states[ids[2]])
+	}
+
+	// 列表过滤：已读 / 收藏 / 归档 各命中一条
+	readT, favT, archT := true, true, true
+	readList, total, err := db.ListEntries(1, 50, EntryFilter{Read: &readT})
+	if err != nil {
+		t.Fatalf("ListEntries read: %v", err)
+	}
+	if total != 1 || len(readList) != 1 || readList[0].ID != ids[0] {
+		t.Fatalf("read filter: total=%d list=%v", total, readList)
+	}
+	favList, total, err := db.ListEntries(1, 50, EntryFilter{Favorite: &favT})
+	if err != nil {
+		t.Fatalf("ListEntries favorite: %v", err)
+	}
+	if total != 1 || len(favList) != 1 || favList[0].ID != ids[1] {
+		t.Fatalf("favorite filter: total=%d list=%v", total, favList)
+	}
+	archList, total, err := db.ListEntries(1, 50, EntryFilter{Archive: &archT})
+	if err != nil {
+		t.Fatalf("ListEntries archive: %v", err)
+	}
+	if total != 1 || len(archList) != 1 || archList[0].ID != ids[2] {
+		t.Fatalf("archive filter: total=%d list=%v", total, archList)
+	}
+
+	// 未归档（收件箱）应返回 2 条（排除已归档的那条）
+	archF := false
+	_, total, err = db.ListEntries(1, 50, EntryFilter{Archive: &archF})
+	if err != nil {
+		t.Fatalf("ListEntries not-archived: %v", err)
+	}
+	if total != 2 {
+		t.Fatalf("not-archived total = %d, want 2", total)
+	}
+
+	// 取消收藏后应回到未收藏；重复标记幂等
+	st, err := db.SetFavorite(ids[1], false)
+	if err != nil {
+		t.Fatalf("SetFavorite false: %v", err)
+	}
+	if st.Favorite {
+		t.Fatal("favorite should be false after cancel")
+	}
+	if _, err := db.SetFavorite(ids[1], false); err != nil {
+		t.Fatalf("SetFavorite idempotent: %v", err)
+	}
+}
+
 func TestMigrateReadLater(t *testing.T) {
 	db := newRawDB(t)
 

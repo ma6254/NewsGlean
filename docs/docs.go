@@ -21,7 +21,7 @@ const docTemplate = `{
     "paths": {
         "/entry/list": {
             "get": {
-                "description": "分页列出条目，可按渠道过滤",
+                "description": "分页列出条目，可按渠道、已读/收藏/归档状态过滤",
                 "produces": [
                     "application/json"
                 ],
@@ -46,6 +46,24 @@ const docTemplate = `{
                         "type": "integer",
                         "description": "按渠道过滤",
                         "name": "source_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "按已读状态过滤",
+                        "name": "read",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "按收藏状态过滤",
+                        "name": "favorite",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "按归档状态过滤",
+                        "name": "archive",
                         "in": "query"
                     }
                 ],
@@ -116,6 +134,162 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/server.EntryDTO"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/entry/{id}/archive": {
+            "put": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "entry"
+                ],
+                "summary": "设置/取消归档",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "条目ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "{\\",
+                        "name": "req",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.EntryDTO"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/entry/{id}/favorite": {
+            "put": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "entry"
+                ],
+                "summary": "设置/取消收藏",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "条目ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "{\\",
+                        "name": "req",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.EntryDTO"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/entry/{id}/read": {
+            "put": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "entry"
+                ],
+                "summary": "设置/取消已读",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "条目ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "{\\",
+                        "name": "req",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.EntryDTO"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
                         }
                     },
                     "404": {
@@ -553,6 +727,10 @@ const docTemplate = `{
         "server.EntryDTO": {
             "type": "object",
             "properties": {
+                "archive": {
+                    "description": "是否已归档",
+                    "type": "boolean"
+                },
                 "author": {
                     "description": "作者",
                     "type": "string"
@@ -572,6 +750,10 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
+                "favorite": {
+                    "description": "是否已收藏",
+                    "type": "boolean"
+                },
                 "fetched_at": {
                     "description": "抓取时间（RFC3339）",
                     "type": "string"
@@ -587,6 +769,10 @@ const docTemplate = `{
                 "published_at": {
                     "description": "发布时间（RFC3339）",
                     "type": "string"
+                },
+                "read": {
+                    "description": "是否已读",
+                    "type": "boolean"
                 },
                 "read_later": {
                     "description": "是否已加入「稍后再阅」",

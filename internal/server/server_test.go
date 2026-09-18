@@ -326,6 +326,106 @@ func TestSourceFetchLogAndStats(t *testing.T) {
 	}
 }
 
+// TestEntryStateAPI 验证已读 / 收藏 / 归档三个状态端点的读写与列表过滤。
+func TestEntryStateAPI(t *testing.T) {
+	feedSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/rss+xml")
+		_, _ = w.Write([]byte(rssBody))
+	}))
+	defer feedSrv.Close()
+
+	ts := newTestServer(t)
+
+	add := doJSON(t, http.MethodPost, ts.URL+"/api/source",
+		`{"name":"test","type":"feed","config":{"url":"`+feedSrv.URL+`"}}`)
+	if add.status != http.StatusOK {
+		t.Fatalf("add source status = %d, body = %s", add.status, add.body)
+	}
+	if ref := doJSON(t, http.MethodPost, ts.URL+"/api/refresh", ""); ref.status != http.StatusOK {
+		t.Fatalf("refresh status = %d, body = %s", ref.status, ref.body)
+	}
+
+	list := doJSON(t, http.MethodGet, ts.URL+"/api/entry/list", "")
+	var lr struct {
+		Total int `json:"total"`
+		Items []struct {
+			ID    uint64 `json:"id"`
+			Title string `json:"title"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(list.body, &lr); err != nil {
+		t.Fatalf("unmarshal list: %v", err)
+	}
+	if lr.Total != 2 {
+		t.Fatalf("total = %d, want 2", lr.Total)
+	}
+	first := lr.Items[0]
+	second := lr.Items[1]
+
+	// 标记第一条已读 + 收藏 + 归档
+	set := doJSON(t, http.MethodPut, ts.URL+"/api/entry/"+strconv.FormatUint(first.ID, 10)+"/read", `{"read":true}`)
+	if set.status != http.StatusOK {
+		t.Fatalf("set read status = %d, body = %s", set.status, set.body)
+	}
+	var dto struct {
+		Read     bool `json:"read"`
+		Favorite bool `json:"favorite"`
+		Archive  bool `json:"archive"`
+	}
+	if err := json.Unmarshal(set.body, &dto); err != nil {
+		t.Fatalf("unmarshal set read: %v", err)
+	}
+	if !dto.Read {
+		t.Fatal("read should be true after set")
+	}
+
+	if set := doJSON(t, http.MethodPut, ts.URL+"/api/entry/"+strconv.FormatUint(first.ID, 10)+"/favorite", `{"favorite":true}`); set.status != http.StatusOK {
+		t.Fatalf("set favorite status = %d, body = %s", set.status, set.body)
+	}
+	if set := doJSON(t, http.MethodPut, ts.URL+"/api/entry/"+strconv.FormatUint(first.ID, 10)+"/archive", `{"archive":true}`); set.status != http.StatusOK {
+		t.Fatalf("set archive status = %d, body = %s", set.status, set.body)
+	}
+
+	// 过滤：已读 1 条、收藏 1 条、归档 1 条、未归档（收件箱）1 条
+	checkTotal := func(q string, want int) {
+		t.Helper()
+		r := doJSON(t, http.MethodGet, ts.URL+"/api/entry/list"+q, "")
+		var res struct {
+			Total int `json:"total"`
+		}
+		if err := json.Unmarshal(r.body, &res); err != nil {
+			t.Fatalf("unmarshal %s: %v", q, err)
+		}
+		if res.Total != want {
+			t.Fatalf("%s total = %d, want %d", q, res.Total, want)
+		}
+	}
+	checkTotal("?read=true", 1)
+	checkTotal("?favorite=true", 1)
+	checkTotal("?archive=true", 1)
+	checkTotal("?archive=false", 1) // 第二条未归档
+
+	// 归档的第二条不应出现在收件箱；确认剩余那条是 second
+	arch := doJSON(t, http.MethodGet, ts.URL+"/api/entry/list?archive=false", "")
+	var archRes struct {
+		Items []struct {
+			ID uint64 `json:"id"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(arch.body, &archRes); err != nil {
+		t.Fatalf("unmarshal archive=false: %v", err)
+	}
+	if len(archRes.Items) != 1 || archRes.Items[0].ID != second.ID {
+		t.Fatalf("inbox should contain only second entry, got %+v", archRes.Items)
+	}
+
+	// 取消已读后 read=false 过滤应为 0 条
+	if set := doJSON(t, http.MethodPut, ts.URL+"/api/entry/"+strconv.FormatUint(first.ID, 10)+"/read", `{"read":false}`); set.status != http.StatusOK {
+		t.Fatalf("unset read status = %d, body = %s", set.status, set.body)
+	}
+	checkTotal("?read=true", 0)
+}
+
 // TestWebEmbedServesIndex 验证默认（embed 模式）下 / 能返回内嵌前端页面。
 func TestWebEmbedServesIndex(t *testing.T) {
 	ts := newTestServer(t)
