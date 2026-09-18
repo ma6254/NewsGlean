@@ -193,6 +193,26 @@
                 }
             }
         },
+        "/refresh/stream": {
+            "get": {
+                "description": "以 Server-Sent Events 实时推送采集进度（渠道开始/完成/失败），供前端显示进度与新内容高亮",
+                "produces": [
+                    "text/event-stream"
+                ],
+                "tags": [
+                    "refresh"
+                ],
+                "summary": "订阅采集进度（SSE）",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/app.ProgressEvent"
+                        }
+                    }
+                }
+            }
+        },
         "/source": {
             "get": {
                 "produces": [
@@ -452,6 +472,46 @@
         }
     },
     "definitions": {
+        "app.ProgressEvent": {
+            "type": "object",
+            "properties": {
+                "elapsed_ms": {
+                    "description": "耗时（毫秒）",
+                    "type": "integer"
+                },
+                "error": {
+                    "description": "错误信息",
+                    "type": "string"
+                },
+                "inserted": {
+                    "description": "新增条目数",
+                    "type": "integer"
+                },
+                "inserted_ids": {
+                    "description": "新增条目ID（供前端高亮）",
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "skipped": {
+                    "description": "去重跳过数",
+                    "type": "integer"
+                },
+                "source_id": {
+                    "description": "渠道ID（source_* 事件）",
+                    "type": "integer"
+                },
+                "source_name": {
+                    "description": "渠道显示名",
+                    "type": "string"
+                },
+                "type": {
+                    "description": "事件类型（见 Event* 常量）",
+                    "type": "string"
+                }
+            }
+        },
         "app.RefreshResult": {
             "type": "object",
             "properties": {

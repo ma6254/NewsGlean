@@ -25,11 +25,23 @@ var logger = log.WithTag("app")
 type App struct {
 	cfg *config.Config
 	db  *database.DB
+	hub *progressHub // 采集进度发布-订阅中心（供 SSE 推送）
 }
 
 // New 构造 App。
 func New(cfg *config.Config, db *database.DB) *App {
-	return &App{cfg: cfg, db: db}
+	return &App{cfg: cfg, db: db, hub: newProgressHub()}
+}
+
+// SubscribeProgress 返回采集进度事件订阅通道。通道带缓冲，消费不及时会丢事件（不阻塞采集）。
+// 调用方不再需要时应调用 UnsubscribeProgress 释放。
+func (a *App) SubscribeProgress() chan ProgressEvent {
+	return a.hub.subscribe()
+}
+
+// UnsubscribeProgress 释放一个进度订阅。
+func (a *App) UnsubscribeProgress(ch chan ProgressEvent) {
+	a.hub.unsubscribe(ch)
 }
 
 // RefreshResult 一轮采集的汇总结果。
@@ -128,10 +140,19 @@ func (a *App) RefreshSource(ctx context.Context, id uint64) (*RefreshResult, err
 }
 
 // refreshOne 拉取单个渠道并写库，返回 (新增条目ID列表, 去重跳过数, 错误)。
-// 无论成功与否，都会在结束时记录一条采集日志（fetch_log），用于可观测性与排障。
+// 无论成功与否，都会在结束时记录一条采集日志（fetch_log）并发布进度事件（SSE）。
 func (a *App) refreshOne(ctx context.Context, s database.Source) (ids []uint64, skipped int, err error) {
 	startedAt := time.Now()
-	defer func() { a.recordFetchLog(s.ID, startedAt, len(ids), skipped, err) }()
+	a.hub.publish(ProgressEvent{Type: EventSourceStarted, SourceID: s.ID, SourceName: s.Name})
+	defer func() {
+		elapsed := time.Since(startedAt).Milliseconds()
+		if err != nil {
+			a.hub.publish(ProgressEvent{Type: EventSourceFailed, SourceID: s.ID, SourceName: s.Name, Error: err.Error(), ElapsedMS: elapsed})
+		} else {
+			a.hub.publish(ProgressEvent{Type: EventSourceDone, SourceID: s.ID, SourceName: s.Name, Inserted: len(ids), InsertedIDs: ids, Skipped: skipped, ElapsedMS: elapsed})
+		}
+		a.recordFetchLog(s.ID, startedAt, len(ids), skipped, err)
+	}()
 
 	conn, err := source.Create(s.Type, s.Config, source.CreateOptions{Proxy: a.cfg.Fetch.Proxy, ChromePath: a.cfg.Fetch.ChromePath})
 	if err != nil {

@@ -25,6 +25,9 @@ func (s *Server) routes() *http.ServeMux {
 	// 手动触发采集
 	mux.HandleFunc("POST /api/refresh", s.handleRefresh)
 
+	// 采集进度实时推送（SSE）
+	mux.HandleFunc("GET /api/refresh/stream", s.handleRefreshStream)
+
 	// 条目读取
 	mux.HandleFunc("GET /api/entry/list", s.handleEntryList)
 	mux.HandleFunc("GET /api/entry/read-later", s.handleReadLaterList)
