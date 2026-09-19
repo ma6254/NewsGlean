@@ -5,6 +5,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -145,6 +146,11 @@ func (a *App) refreshOne(ctx context.Context, s database.Source) (ids []uint64, 
 	startedAt := time.Now()
 	a.hub.publish(ProgressEvent{Type: EventSourceStarted, SourceID: s.ID, SourceName: s.Name})
 	defer func() {
+		// 关闭服务 / 客户端断连导致的取消（context.Canceled）不算失败：
+		// 不写健康度、不落采集日志、也不发失败事件，静默放弃本轮。
+		if errors.Is(err, context.Canceled) {
+			return
+		}
 		elapsed := time.Since(startedAt).Milliseconds()
 		if err != nil {
 			a.hub.publish(ProgressEvent{Type: EventSourceFailed, SourceID: s.ID, SourceName: s.Name, Error: err.Error(), ElapsedMS: elapsed})
@@ -170,7 +176,10 @@ func (a *App) refreshOne(ctx context.Context, s database.Source) (ids []uint64, 
 	}
 	items, newCursor, err := conn.Fetch(ctx, source.Cursor(cursor), defaultFetchLimit)
 	if err != nil {
-		_ = a.db.UpdateSourceHealth(s.ID, s.FailCount+1, err.Error())
+		// 主动取消（停机 / 客户端断连）非渠道故障：不递增失败计数、不写最近错误。
+		if !errors.Is(err, context.Canceled) {
+			_ = a.db.UpdateSourceHealth(s.ID, s.FailCount+1, err.Error())
+		}
 		return nil, 0, err
 	}
 
