@@ -41,30 +41,26 @@ func appendFieldText(sb *strings.Builder, f Field) {
 	sb.WriteString(formatValue(f.Value))
 }
 
-// formatValue 格式化字段值：含空白/引号/等号的字符串加引号，保持行内可读。
+// formatValue 格式化字段值：字符串值统一加引号，保持行内可读。
 func formatValue(v any) string {
 	switch t := v.(type) {
 	case nil:
 		return "<nil>"
 	case string:
-		return quoteIfNeeded(t)
+		return quote(t)
 	case error:
-		return quoteIfNeeded(t.Error())
+		return quote(t.Error())
 	case fmt.Stringer:
-		return quoteIfNeeded(t.String())
+		return quote(t.String())
 	default:
 		return fmt.Sprintf("%v", t)
 	}
 }
 
-func quoteIfNeeded(s string) string {
-	if s == "" {
-		return `""`
-	}
-	if strings.ContainsAny(s, " \t\n\r\"=") {
-		return strconv.Quote(s)
-	}
-	return s
+// quote 统一给字符串值加引号，保证 key=value 行格式可被无歧义解析。
+// 空字符串也会输出为 ""，与 strconv.Quote 行为一致。
+func quote(s string) string {
+	return strconv.Quote(s)
 }
 
 // jsonRecord JSON 序列化中间形态（tags 保持有序数组，与输出端无关）。

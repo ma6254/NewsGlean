@@ -20,7 +20,7 @@ func TestFormatTextLine(t *testing.T) {
 		Fields:  []Field{Str("k", "v"), Str("spaced", "a b")},
 	}
 	line := FormatTextLine(rec, "15:04:05.000")
-	want := "10:00:01.123 INFO [analyze][chapter:3] 开始解析 k=v spaced=\"a b\"\n"
+	want := "10:00:01.123 INFO [analyze][chapter:3] 开始解析 k=\"v\" spaced=\"a b\"\n"
 	if line != want {
 		t.Errorf("line = %q, want %q", line, want)
 	}
