@@ -354,6 +354,46 @@ const docTemplate = `{
                 }
             }
         },
+        "/os/info": {
+            "get": {
+                "description": "获取主机名、操作系统、CPU 与内存等基础信息",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "系统信息"
+                ],
+                "summary": "获取操作系统信息",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.OsInfo"
+                        }
+                    }
+                }
+            }
+        },
+        "/os/state": {
+            "get": {
+                "description": "获取系统的运行时长、空闲内存与 CPU 使用率",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "系统信息"
+                ],
+                "summary": "获取操作系统状态",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.OsState"
+                        }
+                    }
+                }
+            }
+        },
         "/refresh": {
             "post": {
                 "description": "遍历所有启用的渠道拉取新内容并写库（三层去重）",
@@ -650,6 +690,46 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/sys/info": {
+            "get": {
+                "description": "获取服务的启动时间、构建时间与版本信息",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "系统信息"
+                ],
+                "summary": "获取系统信息",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.SysInfo"
+                        }
+                    }
+                }
+            }
+        },
+        "/sys/state": {
+            "get": {
+                "description": "获取服务的运行时长、协程数、堆内存与 GC 次数",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "系统状态"
+                ],
+                "summary": "获取系统状态",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.SysState"
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
@@ -889,6 +969,64 @@ const docTemplate = `{
                 }
             }
         },
+        "server.OsInfo": {
+            "type": "object",
+            "properties": {
+                "arch": {
+                    "description": "系统架构",
+                    "type": "string"
+                },
+                "cpu_count": {
+                    "description": "CPU 核心数",
+                    "type": "integer"
+                },
+                "cpu_model": {
+                    "description": "CPU 型号",
+                    "type": "string"
+                },
+                "hostname": {
+                    "description": "主机名",
+                    "type": "string"
+                },
+                "os_name": {
+                    "description": "操作系统名称",
+                    "type": "string"
+                },
+                "platform": {
+                    "description": "系统平台",
+                    "type": "string"
+                },
+                "start_time": {
+                    "description": "系统启动时间（RFC3339）",
+                    "type": "string"
+                },
+                "total_mem_mb": {
+                    "description": "总内存（MB）",
+                    "type": "integer"
+                }
+            }
+        },
+        "server.OsState": {
+            "type": "object",
+            "properties": {
+                "cpu_freq": {
+                    "description": "CPU 频率",
+                    "type": "string"
+                },
+                "cpu_percent": {
+                    "description": "CPU 使用率（%）",
+                    "type": "integer"
+                },
+                "free_mem_mb": {
+                    "description": "空闲内存（MB）",
+                    "type": "integer"
+                },
+                "uptime": {
+                    "description": "运行时长",
+                    "type": "string"
+                }
+            }
+        },
         "server.SourceDTO": {
             "type": "object",
             "properties": {
@@ -1021,6 +1159,48 @@ const docTemplate = `{
                 },
                 "type": {
                     "description": "渠道类型标识",
+                    "type": "string"
+                }
+            }
+        },
+        "server.SysInfo": {
+            "type": "object",
+            "properties": {
+                "build_time": {
+                    "description": "构建时间",
+                    "type": "string"
+                },
+                "build_version": {
+                    "description": "构建版本",
+                    "type": "string"
+                },
+                "go_version": {
+                    "description": "Go 版本",
+                    "type": "string"
+                },
+                "start_time": {
+                    "description": "服务启动时间（RFC3339）",
+                    "type": "string"
+                }
+            }
+        },
+        "server.SysState": {
+            "type": "object",
+            "properties": {
+                "gc_total_count": {
+                    "description": "垃圾回收总次数",
+                    "type": "integer"
+                },
+                "heap_used_mb": {
+                    "description": "堆内存使用量（MB）",
+                    "type": "integer"
+                },
+                "num_goroutine": {
+                    "description": "当前协程数",
+                    "type": "integer"
+                },
+                "uptime": {
+                    "description": "运行时长",
                     "type": "string"
                 }
             }

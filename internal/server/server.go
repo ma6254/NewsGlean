@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/ma6254/news-glean/internal/app"
 	"github.com/ma6254/news-glean/internal/config"
@@ -24,6 +25,7 @@ type Server struct {
 	mux   *http.ServeMux
 	http  *http.Server
 
+	startTime  time.Time    // 服务启动时间，供系统信息接口返回
 	stopOnce   sync.Once
 	shutdownCh chan struct{} // 关停信号：Stop 时关闭，让 SSE 等长连接立即退出
 }
@@ -35,6 +37,7 @@ func New(cfg *config.Config, db *database.DB, a *app.App, sched *scheduler.Sched
 		db:         db,
 		app:        a,
 		sched:      sched,
+		startTime:  time.Now(),
 		shutdownCh: make(chan struct{}),
 	}
 	srv.mux = srv.routes()

@@ -37,6 +37,12 @@ func (s *Server) routes() *http.ServeMux {
 	mux.HandleFunc("PUT /api/entry/{id}/archive", s.handleEntrySetArchive)
 	mux.HandleFunc("PUT /api/entry/{id}/read-later", s.handleEntrySetReadLater)
 
+	// 系统信息（版本 / 构建时间 / 运行状态 / 操作系统信息）
+	mux.HandleFunc("GET /api/sys/info", s.handleSysInfo)
+	mux.HandleFunc("GET /api/sys/state", s.handleSysState)
+	mux.HandleFunc("GET /api/os/info", s.handleOsInfo)
+	mux.HandleFunc("GET /api/os/state", s.handleOsState)
+
 	// Swagger UI
 	mux.Handle("/swagger/", httpSwagger.WrapHandler)
 
