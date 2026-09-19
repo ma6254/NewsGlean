@@ -22,7 +22,7 @@
 | HTTP API    | `/api/source` CRUD、`/api/source/probe`、`/api/refresh`、`/api/entry/list`、`/api/entry/read-later`，Swagger UI `/swagger/index.html` |
 | 命令        | `news-glean`（启动服务）+ `version` 子命令                           |
 
-M1 验收（DoD）已达成：`go build` / `go vet` / `go test` 全绿，`source add feed → 手动采集 → GET /api/entry/list` 链路可用。M2 的跨渠道去重、游标持久化、「稍后再阅」、Swagger UI 已提前落地；其余 M2–M4 尚未开始，完整设计见 **[PLAN.md](./PLAN.md)**。
+M1 验收（DoD）已达成：`go build` / `go vet` / `go test` 全绿，`source add feed → 手动采集 → GET /api/entry/list` 链路可用。M2 的跨渠道去重、游标持久化、「稍后再阅」、Swagger UI 已提前落地；其余 M2–M4 尚未开始，完整设计见 **[PLAN.md](https://github.com/ma6254/NewsGlean-doc/blob/main/PLAN.md)**。
 
 ---
 
@@ -46,7 +46,7 @@ NewsGlean 的思路是**把「内容怎么来」和「内容怎么读」彻底�
 - **`webhook`** —— 入站 HTTP 端点，任何脚本都能往里推内容
 - **`telegram`** —— 频道/群消息采集
 - **`import`** —— 从本地 Markdown / JSON 批量导入
-- `qq_bot` 等更多渠道待评估，见 [PLAN.md](./PLAN.md)
+- `qq_bot` 等更多渠道待评估，见 [PLAN.md](https://github.com/ma6254/NewsGlean-doc/blob/main/PLAN.md)
 
 ### 统一的阅读体验
 - **净** —— 抓取原文正文，剥离广告与导航
@@ -96,17 +96,17 @@ news-glean list --unread
 | 文档                     | 内容                                                               |
 | ------------------------ | ------------------------------------------------------------------ |
 | **README.md**            | 项目简介（本文件）                                                 |
-| **[PLAN.md](./PLAN.md)** | 设计方案与实现规格：采集抽象、数据模型、命令设计、路线图、技术选型 |
+| **[PLAN.md](https://github.com/ma6254/NewsGlean-doc/blob/main/PLAN.md)** | 设计方案与实现规格：采集抽象、数据模型、命令设计、路线图、技术选型 |
 | **[DEPLOY.md](./DEPLOY.md)** | 公网部署指南：反代（Nginx/Caddy）+ HTTPS + Basic Auth + systemd 自启动 |
 
-技术栈与项目结构约定参照同组织的 `bookcocoon-server`：Go + Cobra + GORM(sqlite/mysql)、标准库 `net/http` 与 swaggo、`internal/` 顶层包布局、PowerShell 构建脚本注入版本号。详见 [PLAN.md 的项目结构](./PLAN.md#项目结构)。
+技术栈与项目结构约定参照同组织的 `bookcocoon-server`：Go + Cobra + GORM(sqlite/mysql)、标准库 `net/http` 与 swaggo、`internal/` 顶层包布局、PowerShell 构建脚本注入版本号。详见 [PLAN.md 的项目结构](https://github.com/ma6254/NewsGlean-doc/blob/main/PLAN.md#项目结构)。
 
 ---
 
 ## 贡献
 
 1. 开工前先在 Issue 里对齐范围，避免大改动返工。
-2. 设计层面的讨论（尤其是 [PLAN.md](./PLAN.md) 中标注为「契约」的接口）请在动手前提出。
+2. 设计层面的讨论（尤其是 [PLAN.md](https://github.com/ma6254/NewsGlean-doc/blob/main/PLAN.md) 中标注为「契约」的接口）请在动手前提出。
 3. Fork → 分支 → 提交 → PR，描述写清动机与验证方式。
 
 ---
