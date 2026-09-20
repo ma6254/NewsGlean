@@ -3,6 +3,8 @@ module github.com/ma6254/news-glean
 go 1.25.0
 
 require (
+	github.com/PuerkitoBio/goquery v1.8.0
+	github.com/andybalholm/cascadia v1.3.1
 	github.com/chromedp/cdproto v0.0.0-20240202021202-6d0b6a386732
 	github.com/chromedp/chromedp v0.9.5
 	github.com/coder/websocket v1.8.15

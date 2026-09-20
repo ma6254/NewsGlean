@@ -20,6 +20,7 @@ import (
 
 	// 注册渠道实现（导入即触发 init 注册到 source 注册表）
 	_ "github.com/ma6254/news-glean/internal/source/feed"
+	_ "github.com/ma6254/news-glean/internal/source/webpage"
 
 	"github.com/spf13/cobra"
 )
