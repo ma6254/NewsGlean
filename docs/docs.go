@@ -434,6 +434,77 @@ const docTemplate = `{
                 }
             }
         },
+        "/search": {
+            "get": {
+                "description": "检索条目标题/摘要/正文/作者；中文按 bigram 分词，多词按 AND 匹配",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "entry"
+                ],
+                "summary": "全文检索",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "关键词",
+                        "name": "q",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "页码（从1开始）",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页数量",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "按渠道过滤",
+                        "name": "source_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "按已读状态过滤",
+                        "name": "read",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "按收藏状态过滤",
+                        "name": "favorite",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "按归档状态过滤",
+                        "name": "archive",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.EntryListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/source": {
             "get": {
                 "produces": [

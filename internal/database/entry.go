@@ -78,7 +78,21 @@ func (d *DB) ListEntries(page, pageSize int, f EntryFilter) ([]Entry, int64, err
 	if pageSize < 1 || pageSize > 200 {
 		pageSize = 50
 	}
-	q := d.Model(&Entry{}).Where("entries.deleted = ?", false)
+	q := applyEntryFilter(d.Model(&Entry{}).Where("entries.deleted = ?", false), f)
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	var list []Entry
+	err := q.Order("entries.published_at DESC, entries.id DESC").
+		Offset((page - 1) * pageSize).Limit(pageSize).Find(&list).Error
+	return list, total, err
+}
+
+// applyEntryFilter 把 EntryFilter 的过滤条件叠加到查询上（渠道 + 阅读状态）。
+// 状态过滤需要 LEFT JOIN entry_state；无状态行的条目按「全部 false」处理。
+// 调用方需先叠加 entries.deleted 等基础条件。
+func applyEntryFilter(q *gorm.DB, f EntryFilter) *gorm.DB {
 	if f.SourceID != 0 {
 		q = q.Where("entries.source_id = ?", f.SourceID)
 	}
@@ -94,14 +108,7 @@ func (d *DB) ListEntries(page, pageSize int, f EntryFilter) ([]Entry, int64, err
 			q = q.Where("COALESCE(entry_state.archive, 0) = ?", boolInt(*f.Archive))
 		}
 	}
-	var total int64
-	if err := q.Count(&total).Error; err != nil {
-		return nil, 0, err
-	}
-	var list []Entry
-	err := q.Order("entries.published_at DESC, entries.id DESC").
-		Offset((page - 1) * pageSize).Limit(pageSize).Find(&list).Error
-	return list, total, err
+	return q
 }
 
 // EntryExistsByGUID 判断某渠道下是否已存在指定 GUID 的条目（去重第一层，按渠道隔离）。

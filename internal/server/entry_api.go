@@ -131,18 +131,10 @@ func (s *Server) handleEntryList(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	ids := make([]uint64, len(list))
-	for i := range list {
-		ids[i] = list[i].ID
-	}
-	states, err := s.db.GetEntryStates(ids)
+	items, err := s.entryDTOs(list)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
-	}
-	items := make([]EntryDTO, 0, len(list))
-	for i := range list {
-		items = append(items, toEntryDTO(&list[i], states[list[i].ID]))
 	}
 	writeJSON(w, http.StatusOK, EntryListResponse{
 		Items:    items,
@@ -150,6 +142,23 @@ func (s *Server) handleEntryList(w http.ResponseWriter, r *http.Request) {
 		Page:     page,
 		PageSize: pageSize,
 	})
+}
+
+// entryDTOs 把一批条目连同各自阅读状态映射为 DTO 列表。
+func (s *Server) entryDTOs(list []database.Entry) ([]EntryDTO, error) {
+	ids := make([]uint64, len(list))
+	for i := range list {
+		ids[i] = list[i].ID
+	}
+	states, err := s.db.GetEntryStates(ids)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]EntryDTO, 0, len(list))
+	for i := range list {
+		items = append(items, toEntryDTO(&list[i], states[list[i].ID]))
+	}
+	return items, nil
 }
 
 // handleEntryGet 处理 GET /api/entry/{id}。

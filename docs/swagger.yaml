@@ -626,6 +626,53 @@ paths:
       summary: 订阅采集进度（SSE）
       tags:
       - refresh
+  /search:
+    get:
+      description: 检索条目标题/摘要/正文/作者；中文按 bigram 分词，多词按 AND 匹配
+      parameters:
+      - description: 关键词
+        in: query
+        name: q
+        required: true
+        type: string
+      - description: 页码（从1开始）
+        in: query
+        name: page
+        type: integer
+      - description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      - description: 按渠道过滤
+        in: query
+        name: source_id
+        type: integer
+      - description: 按已读状态过滤
+        in: query
+        name: read
+        type: boolean
+      - description: 按收藏状态过滤
+        in: query
+        name: favorite
+        type: boolean
+      - description: 按归档状态过滤
+        in: query
+        name: archive
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.EntryListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: 全文检索
+      tags:
+      - entry
   /source:
     get:
       produces:

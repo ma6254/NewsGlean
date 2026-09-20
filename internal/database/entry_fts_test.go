@@ -128,3 +128,43 @@ func TestFTSBackfill(t *testing.T) {
 		t.Fatal("soft-deleted existing entry should not be backfilled")
 	}
 }
+
+// TestFTSRebuildFromRawIndex 验证从阶段 5（无中文分词）升级到阶段 6（bigram）时，
+// installFTS 会检测到 tokenization 版本落后并重建索引 + 回填。
+func TestFTSRebuildFromRawIndex(t *testing.T) {
+	db := newRawDB(t)
+
+	// 手工造 entries 表，模拟阶段 5 已采集的存量数据
+	if err := db.Exec(`CREATE TABLE entries (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		title TEXT, summary TEXT, content TEXT, author TEXT, deleted INTEGER
+	)`).Error; err != nil {
+		t.Fatalf("create entries: %v", err)
+	}
+	if err := db.Exec(`INSERT INTO entries (title, summary, content, author, deleted) VALUES
+		('中文分词测试', '', '', '', 0)`).Error; err != nil {
+		t.Fatalf("insert entries: %v", err)
+	}
+
+	// 建原始 FTS 表并按原样（无 bigram）灌入，等价于阶段 5 的产物
+	if err := db.Exec(ftsCreateSQL).Error; err != nil {
+		t.Fatalf("create raw fts: %v", err)
+	}
+	if err := db.Exec(`INSERT INTO entries_fts(rowid, title, summary, content, author)
+		SELECT id, title, summary, content, author FROM entries WHERE deleted = 0`).Error; err != nil {
+		t.Fatalf("raw backfill: %v", err)
+	}
+
+	// 阶段 6 的 installFTS 应检测到版本落后（user_version=0 < 1）并重建为 bigram 索引
+	if err := db.installFTS(); err != nil {
+		t.Fatalf("installFTS: %v", err)
+	}
+
+	// 重建后中文双字可命中（原始索引下整串是一个 token，搜双字会落空）
+	if ftsMatchCount(t, db, "中文") != 1 {
+		t.Fatal("bigram token 中文 should match after rebuild")
+	}
+	if ftsMatchCount(t, db, "分词") != 1 {
+		t.Fatal("bigram token 分词 should match after rebuild")
+	}
+}
