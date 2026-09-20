@@ -103,6 +103,8 @@ type LLMConfig struct {
 // ExportConfig 导出参数。
 type ExportConfig struct {
 	MarkdownDir string `yaml:"markdown_dir"` // Markdown 导出目录
+	JSONDir     string `yaml:"json_dir"`     // JSON 导出目录
+	EPUBDir     string `yaml:"epub_dir"`     // EPUB 导出目录
 	EPUB        bool   `yaml:"epub"`         // 是否启用 EPUB 导出
 }
 
@@ -166,6 +168,8 @@ func Default() *Config {
 		},
 		Export: ExportConfig{
 			MarkdownDir: "./export",
+			JSONDir:     "./export-json",
+			EPUBDir:     "./export-epub",
 			EPUB:        false,
 		},
 	}

@@ -25,7 +25,7 @@ type Server struct {
 	mux   *http.ServeMux
 	http  *http.Server
 
-	startTime  time.Time    // 服务启动时间，供系统信息接口返回
+	startTime  time.Time // 服务启动时间，供系统信息接口返回
 	stopOnce   sync.Once
 	shutdownCh chan struct{} // 关停信号：Stop 时关闭，让 SSE 等长连接立即退出
 }

@@ -89,6 +89,17 @@ func (d *DB) ListEntries(page, pageSize int, f EntryFilter) ([]Entry, int64, err
 	return list, total, err
 }
 
+// ListAllEntries 返回匹配过滤条件的所有未删除条目（不分页），
+// 按 source_id 升序、发布时间倒序、ID 倒序排序，供导出等全量消费场景使用。
+// 过滤逻辑与 ListEntries 共用 applyEntryFilter，零值 EntryFilter 表示全量。
+func (d *DB) ListAllEntries(f EntryFilter) ([]Entry, error) {
+	var list []Entry
+	err := applyEntryFilter(d.Model(&Entry{}).Where("entries.deleted = ?", false), f).
+		Order("entries.source_id ASC, entries.published_at DESC, entries.id DESC").
+		Find(&list).Error
+	return list, err
+}
+
 // applyEntryFilter 把 EntryFilter 的过滤条件叠加到查询上（渠道 + 阅读状态）。
 // 状态过滤需要 LEFT JOIN entry_state；无状态行的条目按「全部 false」处理。
 // 调用方需先叠加 entries.deleted 等基础条件。

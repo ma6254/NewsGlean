@@ -31,6 +31,12 @@ func (s *Server) routes() *http.ServeMux {
 	// 全文检索
 	mux.HandleFunc("GET /api/search", s.handleSearch)
 
+	// 导出
+	mux.HandleFunc("POST /api/export/markdown", s.handleExportMarkdown)
+	mux.HandleFunc("POST /api/export/json", s.handleExportJSON)
+	mux.HandleFunc("POST /api/export/epub", s.handleExportEPUB)
+	mux.HandleFunc("GET /api/export/download", s.handleExportDownload)
+
 	// 条目读取
 	mux.HandleFunc("GET /api/entry/list", s.handleEntryList)
 	mux.HandleFunc("GET /api/entry/read-later", s.handleReadLaterList)

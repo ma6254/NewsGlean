@@ -91,6 +91,26 @@ func parseOptionalBool(q url.Values, key string) (*bool, error) {
 	return &v, nil
 }
 
+// parseEntryFilter 从查询参数解析条目过滤条件。
+// source_id 非数字时忽略（按不过滤处理），read/favorite/archive 非法时返回错误。
+// 条目列表与导出共用，保证两处的过滤语义一致。
+func parseEntryFilter(r *http.Request) (database.EntryFilter, error) {
+	q := r.URL.Query()
+	sourceID, _ := strconv.ParseUint(q.Get("source_id"), 10, 64)
+	filter := database.EntryFilter{SourceID: sourceID}
+	var err error
+	if filter.Read, err = parseOptionalBool(q, "read"); err != nil {
+		return filter, errors.New("invalid read filter")
+	}
+	if filter.Favorite, err = parseOptionalBool(q, "favorite"); err != nil {
+		return filter, errors.New("invalid favorite filter")
+	}
+	if filter.Archive, err = parseOptionalBool(q, "archive"); err != nil {
+		return filter, errors.New("invalid archive filter")
+	}
+	return filter, nil
+}
+
 // handleEntryList 处理 GET /api/entry/list（分页，可按渠道与阅读状态过滤）。
 //
 // @Summary      列出条目
@@ -109,20 +129,10 @@ func (s *Server) handleEntryList(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	page, _ := strconv.Atoi(q.Get("page"))
 	pageSize, _ := strconv.Atoi(q.Get("page_size"))
-	sourceID, _ := strconv.ParseUint(q.Get("source_id"), 10, 64)
 
-	filter := database.EntryFilter{SourceID: sourceID}
-	var err error
-	if filter.Read, err = parseOptionalBool(q, "read"); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid read filter")
-		return
-	}
-	if filter.Favorite, err = parseOptionalBool(q, "favorite"); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid favorite filter")
-		return
-	}
-	if filter.Archive, err = parseOptionalBool(q, "archive"); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid archive filter")
+	filter, err := parseEntryFilter(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 

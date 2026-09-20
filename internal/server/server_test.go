@@ -60,6 +60,10 @@ func newTestServer(t *testing.T) *httptest.Server {
 	}
 
 	cfg := config.Default()
+	// 导出测试写入临时目录，避免污染工作目录
+	cfg.Export.MarkdownDir = t.TempDir()
+	cfg.Export.JSONDir = t.TempDir()
+	cfg.Export.EPUBDir = t.TempDir()
 	a := app.New(cfg, db)
 	sched := scheduler.New(cfg, db, a)
 	srv := New(cfg, db, a, sched)

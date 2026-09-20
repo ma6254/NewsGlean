@@ -69,4 +69,6 @@ llm:
 # 导出
 export:
   markdown_dir: "./export"
+  json_dir: "./export-json"
+  epub_dir: "./export-epub"
   epub: false

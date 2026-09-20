@@ -354,6 +354,221 @@ const docTemplate = `{
                 }
             }
         },
+        "/export/download": {
+            "get": {
+                "description": "触发导出并返回文件流：markdown→zip、json→单文件、epub→单文件或多源打包 zip；过滤参数同列表",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "export"
+                ],
+                "summary": "导出并下载",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "格式：markdown|json|epub",
+                        "name": "format",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "按渠道过滤",
+                        "name": "source_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "按已读状态过滤",
+                        "name": "read",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "按收藏状态过滤",
+                        "name": "favorite",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "按归档状态过滤",
+                        "name": "archive",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/export/epub": {
+            "post": {
+                "description": "将条目按源导出为 EPUB（每源一本、按月份分章），容器用标准库 archive/zip 自写，重复导出幂等覆盖",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "export"
+                ],
+                "summary": "导出 EPUB",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "按渠道过滤",
+                        "name": "source_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "按已读状态过滤",
+                        "name": "read",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "按收藏状态过滤",
+                        "name": "favorite",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "按归档状态过滤",
+                        "name": "archive",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/export.Result"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/export/json": {
+            "post": {
+                "description": "将条目导出为单个 JSON 数组文件（entries.json），tags/extra 展开为原生结构，重复导出幂等覆盖",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "export"
+                ],
+                "summary": "导出 JSON",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "按渠道过滤",
+                        "name": "source_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "按已读状态过滤",
+                        "name": "read",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "按收藏状态过滤",
+                        "name": "favorite",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "按归档状态过滤",
+                        "name": "archive",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/export.Result"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/export/markdown": {
+            "post": {
+                "description": "将条目按「源/YYYY-MM」分目录导出为 Markdown（含 YAML front matter），重复导出幂等覆盖",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "export"
+                ],
+                "summary": "导出 Markdown",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "按渠道过滤",
+                        "name": "source_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "按已读状态过滤",
+                        "name": "read",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "按收藏状态过滤",
+                        "name": "favorite",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "按归档状态过滤",
+                        "name": "archive",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/export.Result"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/os/info": {
             "get": {
                 "description": "获取主机名、操作系统、CPU 与内存等基础信息",
@@ -871,6 +1086,23 @@ const docTemplate = `{
                 },
                 "sources": {
                     "description": "处理的渠道数",
+                    "type": "integer"
+                }
+            }
+        },
+        "export.Result": {
+            "type": "object",
+            "properties": {
+                "dir": {
+                    "description": "输出根目录",
+                    "type": "string"
+                },
+                "sources": {
+                    "description": "本批次覆盖的渠道数",
+                    "type": "integer"
+                },
+                "total": {
+                    "description": "导出条数",
                     "type": "integer"
                 }
             }
