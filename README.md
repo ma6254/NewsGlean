@@ -6,6 +6,8 @@
 [![License](https://img.shields.io/badge/License-MIT-blue)](./LICENSE)
 [![Status](https://img.shields.io/badge/status-M2进行中-orange)](#项目状态)
 
+![screenshot_001](./docs/screenshot_001.png)
+
 ---
 
 ## 项目状态
