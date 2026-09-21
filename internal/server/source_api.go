@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/ma6254/news-glean/internal/database"
 )
@@ -336,6 +337,37 @@ func (s *Server) handleSourceProbe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, info)
+}
+
+// handleSourceEnvCheck 处理 GET /api/source/env-check（检测渠道运行环境）。
+//
+// @Summary      检测渠道运行环境
+// @Description  检测渠道的外部依赖（如 bilibili-cli）是否安装、是否登录，返回用户信息与安装提示
+// @Tags         source
+// @Produce      json
+// @Param        type      query     string  true   "渠道类型标识"
+// @Param        bili_path query     string  false  "可选：bilibili-cli 可执行文件路径覆盖"
+// @Success      200       {object}  source.EnvCheck
+// @Failure      400       {object}  ErrorResponse
+// @Router       /source/env-check [get]
+func (s *Server) handleSourceEnvCheck(w http.ResponseWriter, r *http.Request) {
+	typ := r.URL.Query().Get("type")
+	if typ == "" {
+		writeError(w, http.StatusBadRequest, "type is required")
+		return
+	}
+	// 可选：bili_path 覆盖（前端手动填执行文件路径时，用该路径重新检测）
+	cfgJSON := "{}"
+	if p := strings.TrimSpace(r.URL.Query().Get("bili_path")); p != "" {
+		b, _ := json.Marshal(map[string]string{"bili_path": p})
+		cfgJSON = string(b)
+	}
+	check, err := s.app.CheckEnv(r.Context(), typ, cfgJSON)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, check)
 }
 
 // handleRefresh 处理 POST /api/refresh（手动触发一轮采集）。

@@ -19,6 +19,135 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/bilibili/backfill": {
+            "post": {
+                "description": "对指定 bilibili 源中摘要为空的条目，逐条调用 bili video 补拉简介",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "bilibili"
+                ],
+                "summary": "回填简介",
+                "parameters": [
+                    {
+                        "description": "{source_id}",
+                        "name": "req",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/bilibili/favorites": {
+            "get": {
+                "description": "调用 bili favorites 返回当前登录用户的收藏夹列表（需已登录）",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "bilibili"
+                ],
+                "summary": "列出收藏夹",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "可选：bilibili-cli 可执行文件路径覆盖",
+                        "name": "bili_path",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/bilibili/login": {
+            "post": {
+                "description": "把 SESSDATA/bili_jct 写入 bilibili-cli 凭证文件（~/.bilibili-cli/credential.json），并回读校验登录态",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "bilibili"
+                ],
+                "summary": "手动登录 bilibili",
+                "parameters": [
+                    {
+                        "description": "{sessdata, bili_jct, buvid3?}",
+                        "name": "req",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/entry/list": {
             "get": {
                 "description": "分页列出条目，可按渠道、已读/收藏/归档状态过滤",
@@ -777,6 +906,47 @@ const docTemplate = `{
                 }
             }
         },
+        "/source/env-check": {
+            "get": {
+                "description": "检测渠道的外部依赖（如 bilibili-cli）是否安装、是否登录，返回用户信息与安装提示",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "source"
+                ],
+                "summary": "检测渠道运行环境",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "渠道类型标识",
+                        "name": "type",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "可选：bilibili-cli 可执行文件路径覆盖",
+                        "name": "bili_path",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/source.EnvCheck"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/server.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/source/probe": {
             "post": {
                 "description": "在保存前探测渠道元信息（如 feed 标题），供「自动获取显示名」使用",
@@ -1504,6 +1674,79 @@ const docTemplate = `{
                 },
                 "uptime": {
                     "description": "运行时长",
+                    "type": "string"
+                }
+            }
+        },
+        "source.EnvCheck": {
+            "type": "object",
+            "properties": {
+                "authed": {
+                    "description": "登录态（仅登录类 mode 有意义）",
+                    "type": "boolean"
+                },
+                "hints": {
+                    "description": "安装/修复提示（供前端渲染教程）",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "missing": {
+                    "description": "缺失项的人话描述",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "path": {
+                    "description": "命中的可执行文件路径",
+                    "type": "string"
+                },
+                "ready": {
+                    "description": "是否可正常采集",
+                    "type": "boolean"
+                },
+                "user": {
+                    "description": "登录用户信息（未登录为 nil）",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/source.EnvUser"
+                        }
+                    ]
+                },
+                "version": {
+                    "description": "外部依赖版本（空=未装）",
+                    "type": "string"
+                }
+            }
+        },
+        "source.EnvUser": {
+            "type": "object",
+            "properties": {
+                "avatar": {
+                    "description": "首版为空（占位），后续上游补 face",
+                    "type": "string"
+                },
+                "coins": {
+                    "type": "integer"
+                },
+                "follower": {
+                    "type": "integer"
+                },
+                "following": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "level": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "sign": {
                     "type": "string"
                 }
             }

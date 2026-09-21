@@ -182,3 +182,21 @@ func (d *DB) LatestPublishTimes() (map[uint64]string, error) {
 	}
 	return m, nil
 }
+
+// ListEntriesForBackfill 返回某渠道下摘要为空且有 GUID 的条目（供回填简介/正文用）。
+func (d *DB) ListEntriesForBackfill(sourceID uint64) ([]Entry, error) {
+	var list []Entry
+	err := d.Where("source_id = ? AND deleted = ? AND guid != '' AND (summary = '' OR summary IS NULL)", sourceID, false).
+		Order("id DESC").Find(&list).Error
+	return list, err
+}
+
+// UpdateEntryEnrich 回填条目的摘要与附加字段（简介/统计回填用）。
+func (d *DB) UpdateEntryEnrich(id uint64, summary, extra string) error {
+	return d.Model(&Entry{}).Where("id = ? AND deleted = ?", id, false).
+		Updates(map[string]any{
+			"summary":    summary,
+			"extra":      extra,
+			"updated_at": nowString(),
+		}).Error
+}

@@ -11,6 +11,7 @@ import (
 const (
 	SourceTypeFeed     = "feed"     // RSS / Atom / JSON Feed
 	SourceTypeWebpage  = "webpage"  // 网页列表页爬取
+	SourceTypeBilibili = "bilibili" // B 站个人数据（观看历史 / 收藏夹）
 	SourceTypeTelegram = "telegram" // Telegram 频道/群
 	SourceTypeWebhook  = "webhook"  // 通用入站
 )

@@ -22,6 +22,18 @@ func (s *Server) routes() *http.ServeMux {
 	// 渠道元信息探测（保存前「自动获取显示名」）
 	mux.HandleFunc("POST /api/source/probe", s.handleSourceProbe)
 
+	// 渠道运行环境检测（外部依赖是否安装/登录）
+	mux.HandleFunc("GET /api/source/env-check", s.handleSourceEnvCheck)
+
+	// bilibili 手动登录（写 SESSDATA/bili_jct 到 bilibili-cli 凭证文件）
+	mux.HandleFunc("POST /api/bilibili/login", s.handleBilibiliLogin)
+
+	// bilibili 收藏夹列表（需登录）
+	mux.HandleFunc("GET /api/bilibili/favorites", s.handleBilibiliFavorites)
+
+	// bilibili 简介回填（对已有空简介条目补拉）
+	mux.HandleFunc("POST /api/bilibili/backfill", s.handleBilibiliBackfill)
+
 	// 手动触发采集
 	mux.HandleFunc("POST /api/refresh", s.handleRefresh)
 

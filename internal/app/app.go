@@ -96,6 +96,25 @@ func (a *App) ProbeSource(ctx context.Context, typ, cfgJSON string) (source.Prob
 	return prober.Probe(ctx)
 }
 
+// CheckEnv 检测渠道运行环境（如外部 CLI 是否安装/登录）。
+// cfgJSON 为可选配置（如 bili_path 覆盖），留空用 "{}"。
+// 仅当渠道类型实现了 source.EnvChecker 时可用，否则返回 source.ErrEnvCheckUnsupported。
+func (a *App) CheckEnv(ctx context.Context, typ, cfgJSON string) (source.EnvCheck, error) {
+	if cfgJSON == "" {
+		cfgJSON = "{}"
+	}
+	conn, err := source.Create(typ, cfgJSON, source.CreateOptions{Proxy: a.cfg.Fetch.Proxy, ChromePath: a.cfg.Fetch.ChromePath})
+	if err != nil {
+		return source.EnvCheck{}, err
+	}
+	defer conn.Close()
+	checker, ok := conn.(source.EnvChecker)
+	if !ok {
+		return source.EnvCheck{}, source.ErrEnvCheckUnsupported
+	}
+	return checker.CheckEnv(ctx)
+}
+
 // RefreshAll 手动触发一轮采集，遍历所有启用的渠道。
 func (a *App) RefreshAll(ctx context.Context) (*RefreshResult, error) {
 	sources, err := a.db.ListSources()
@@ -183,9 +202,22 @@ func (a *App) refreshOne(ctx context.Context, s database.Source) (ids []uint64, 
 		return nil, 0, err
 	}
 
+	// 仅对「新」条目回填详情（如视频简介/字幕），已存在条目跳过，避免重复 N+1 调用。
+	enricher, _ := conn.(source.Enricher)
 	ids = []uint64{}
 	for _, item := range items {
 		item.SourceID = strconv.FormatUint(s.ID, 10)
+		if enricher != nil && item.GUID != "" {
+			exists, existErr := a.db.EntryExistsByGUID(s.ID, item.GUID)
+			if existErr != nil {
+				return ids, skipped, existErr
+			}
+			if !exists {
+				if enriched, enrichErr := enricher.Enrich(ctx, item); enrichErr == nil {
+					item = enriched
+				}
+			}
+		}
 		id, ok, ingestErr := a.ingestItem(s.ID, item)
 		if ingestErr != nil {
 			return ids, skipped, ingestErr
