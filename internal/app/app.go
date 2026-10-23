@@ -13,6 +13,7 @@ import (
 	"github.com/ma6254/news-glean/internal/config"
 	"github.com/ma6254/news-glean/internal/database"
 	"github.com/ma6254/news-glean/internal/filter"
+	"github.com/ma6254/news-glean/internal/sanitize"
 	"github.com/ma6254/news-glean/internal/source"
 	"github.com/ma6254/news-glean/log"
 )
@@ -259,7 +260,16 @@ func (a *App) recordFetchLog(sourceID uint64, startedAt time.Time, inserted, ski
 
 // ingestItem 对单条 Item 做三层去重（GUID → URL → ContentHash）并写库，
 // 返回 (新条目ID, 是否入库, 错误)；跳过时 ID 为 0。
+//
+// HTML 正文/摘要在去重与写库前先经白名单净化（BUG-001）：恶意或被劫持的
+// 订阅源可在正文中夹带事件属性/script 等载荷，前端详情页以 innerHTML 渲染
+// 即成存储型 XSS。放在 ingest 层一处生效，覆盖 feed/webpage 及未来渠道；
+// 纯文本（text/plain）不做净化，原样保留。
 func (a *App) ingestItem(sourceID uint64, item source.Item) (uint64, bool, error) {
+	if item.ContentType == "text/html" {
+		item.Content = sanitize.HTML(item.Content)
+		item.Summary = sanitize.HTML(item.Summary)
+	}
 	guid := item.GUID
 	normURL := filter.NormalizeURL(item.URL)
 

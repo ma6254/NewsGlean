@@ -286,8 +286,9 @@ func looksLikeHTML(s string) bool {
 }
 
 // htmlToXHTML 把 HTML 正文做最小 XHTML 化：void 元素补自闭合、裸 & 转义。
-// 属「尽力而为」：不做完整良构校验，非良构正文可能无法被严格阅读器解析；
-// 完整清洗留到阶段 12 正文提取后增强。
+// 属「尽力而为」：不做完整良构校验，非良构正文可能无法被严格阅读器解析。
+// 入库内容已由 ingest 层净化（BUG-001，internal/sanitize）；净化上线前的
+// 存量条目仍可能携带原始载荷，如需彻底清洗需一次性回填（见 BUG-001 §9）。
 func htmlToXHTML(s string) string {
 	return selfCloseVoid(escapeBareAmp(s))
 }
